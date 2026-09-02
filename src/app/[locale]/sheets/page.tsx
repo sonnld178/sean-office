@@ -37,6 +37,23 @@ export default function SheetsPage() {
               [".xlsx"],
             "application/vnd.ms-excel": [".xls"],
           }}
+          samples={[{ href: "/samples/sheets-messy.xlsx", label: "Sample XLSX" }]}
+          onLoadSample={async (href) => {
+            const res = await fetch(href);
+            if (!res.ok) throw new Error("Failed to load sample");
+            const buffer = await res.arrayBuffer();
+            const { headers, rows } = await parseSpreadsheet(buffer);
+            setSheetsData(headers, rows);
+            setSheetsMappings(
+              headers.map((h) => ({
+                source: h,
+                target: h,
+                transform: "none" as const,
+              }))
+            );
+            setFileName(href.split("/").pop() || "sheets-messy.xlsx");
+            setLoaded(true);
+          }}
           onFiles={async (items, { setProgress }) => {
             setProgress(90);
             const { headers, rows } = await parseSpreadsheet(items[0].buffer);

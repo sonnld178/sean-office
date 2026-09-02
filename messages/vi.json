@@ -258,6 +258,16 @@
     "memoryBody": "Khi bật, preference mapping có thể lưu với consent. Xóa memory bất cứ lúc nào.",
     "contact": "Câu hỏi? Liên hệ qua portfolio hoặc WhatsApp."
   },
+  "sample": {
+    "noFile": "Chưa có file? Dùng data mẫu",
+    "trySample": "Dùng thử",
+    "download": "Tải xuống",
+    "loadInApp": "Mở trong app",
+    "sheetsFiles": "Sheets: workbook + mapping JSON",
+    "wordFiles": "Word: template + data sheet",
+    "pdfFiles": "PDF: demo 3 trang có bảng",
+    "loading": "Đang tải mẫu..."
+  },
   "common": {
     "back": "Quay lại",
     "upload": "Upload",

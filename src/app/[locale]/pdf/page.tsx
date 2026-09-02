@@ -32,6 +32,14 @@ export default function PdfPage() {
           secondaryLabel={t("uploadDragHint")}
           icon={<FileType className="size-6" />}
           accept={{ "application/pdf": [".pdf"] }}
+          samples={[{ href: "/samples/pdf-demo-3pages.pdf", label: "Demo PDF (3 pages)" }]}
+          onLoadSample={async (href) => {
+            const res = await fetch(href);
+            if (!res.ok) throw new Error("Failed to load sample");
+            const buffer = await res.arrayBuffer();
+            setPdfBuf(buffer);
+            setFileName(href.split("/").pop() || "pdf-demo-3pages.pdf");
+          }}
           onFiles={async (items, { setProgress }) => {
             setPdfBuf(items[0].buffer);
             setFileName(items[0].file.name || "document.pdf");

@@ -30,6 +30,17 @@ export default function WordPage() {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
               [".docx"],
           }}
+          samples={[
+            { href: "/samples/word-template.docx", label: "Template .docx" },
+            { href: "/samples/word-data.xlsx", label: "Data .xlsx", downloadOnly: true },
+          ]}
+          onLoadSample={async (href) => {
+            const res = await fetch(href);
+            if (!res.ok) throw new Error("Failed to load sample");
+            const buffer = await res.arrayBuffer();
+            setDocBuf(buffer);
+            setFileName(href.split("/").pop() || "word-template.docx");
+          }}
           onFiles={async (items, { setProgress }) => {
             setDocBuf(items[0].buffer);
             setFileName(items[0].file.name || "document.docx");

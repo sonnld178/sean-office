@@ -1,13 +1,24 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { Download, FlaskConical, Loader2 } from "lucide-react";
 import { FileDropzone } from "@/components/common/file-dropzone";
 import type { LoadedFile } from "@/lib/file-upload";
 import type { UploadHelpers } from "@/components/common/file-dropzone";
 import ClickSpark from "@/components/ClickSpark";
 import SpotlightCard from "@/components/SpotlightCard";
 import BlurText from "@/components/BlurText";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+export type SampleFile = {
+  href: string;
+  label: string;
+  /** if true, hide Load in app button (download only) */
+  downloadOnly?: boolean;
+};
 
 interface ToolUploadScreenProps {
   title: string;
@@ -19,6 +30,8 @@ interface ToolUploadScreenProps {
   multiple?: boolean;
   onFiles: (items: LoadedFile[], helpers: UploadHelpers) => void | Promise<void>;
   variant?: "default" | "hero";
+  samples?: SampleFile[];
+  onLoadSample?: (href: string, label: string, helpers: UploadHelpers) => void | Promise<void>;
 }
 
 export function ToolUploadScreen({
@@ -31,7 +44,11 @@ export function ToolUploadScreen({
   multiple,
   onFiles,
   variant = "hero",
+  samples,
+  onLoadSample,
 }: ToolUploadScreenProps) {
+  const tSample = useTranslations("sample");
+  const [loadingHref, setLoadingHref] = useState<string | null>(null);
   if (variant === "default") {
     return (
       <div className="mx-auto flex min-h-[calc(100dvh-10rem)] max-w-xl flex-col justify-center py-8">
@@ -49,6 +66,40 @@ export function ToolUploadScreen({
           multiple={multiple}
           onFiles={onFiles}
         />
+        {samples && samples.length > 0 && (
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+            <span className="text-xs text-muted-foreground">{tSample("noFile")}</span>
+            {samples.map((s) => (
+              <div key={s.href} className="flex items-center gap-1.5">
+                <Button asChild variant="outline" size="sm" className="h-7 gap-1.5">
+                  <a href={s.href} download>
+                    <Download className="size-3.5" />
+                    {s.label}
+                  </a>
+                </Button>
+                {onLoadSample && !s.downloadOnly && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-7 gap-1.5"
+                    disabled={loadingHref !== null}
+                    onClick={async () => {
+                      setLoadingHref(s.href);
+                      try {
+                        await onLoadSample(s.href, s.label, { setProgress: () => {} });
+                      } finally {
+                        setLoadingHref(null);
+                      }
+                    }}
+                  >
+                    {loadingHref === s.href ? <Loader2 className="size-3.5 animate-spin" /> : <FlaskConical className="size-3.5" />}
+                    {tSample("trySample")}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -98,6 +149,61 @@ export function ToolUploadScreen({
           />
         </SpotlightCard>
       </ClickSpark>
+
+      {samples && samples.length > 0 && (
+        <div className="shrink-0 rounded-xl border border-border bg-card/60 px-3 py-3 shadow-sm backdrop-blur-sm md:px-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                <FlaskConical className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium leading-none">{tSample("noFile")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {samples.map((s) => s.label).join("  •  ")}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {samples.map((s) => (
+                <div key={s.href} className="flex items-center gap-1.5">
+                  <Button asChild variant="outline" size="sm" className="h-8 gap-1.5">
+                    <a href={s.href} download>
+                      <Download className="size-3.5" />
+                      {s.label}
+                    </a>
+                  </Button>
+                  {onLoadSample && !s.downloadOnly && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-8 gap-1.5"
+                      disabled={loadingHref !== null}
+                      onClick={async () => {
+                        setLoadingHref(s.href);
+                        try {
+                          await onLoadSample(s.href, s.label, {
+                            setProgress: () => {},
+                          });
+                        } finally {
+                          setLoadingHref(null);
+                        }
+                      }}
+                    >
+                      {loadingHref === s.href ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <FlaskConical className="size-3.5" />
+                      )}
+                      {loadingHref === s.href ? tSample("loading") : tSample("trySample")}
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -334,6 +334,16 @@
     "memoryBody": "In development. No AI features are enabled yet.",
     "contact": "Questions? Reach out via portfolio or WhatsApp."
   },
+  "sample": {
+    "noFile": "No file? Try a sample",
+    "trySample": "Try sample",
+    "download": "Download",
+    "loadInApp": "Load in app",
+    "sheetsFiles": "Sheets: messy workbook + mapping JSON",
+    "wordFiles": "Word: template + data sheet",
+    "pdfFiles": "PDF: 3-page demo with tables",
+    "loading": "Loading sample..."
+  },
   "common": {
     "back": "Back",
     "upload": "Upload",

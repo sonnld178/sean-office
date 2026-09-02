@@ -1,0 +1,89 @@
+{
+  "notAnArray": true,
+  "mappings": [
+    {
+      "source": "Full Name",
+      "target": "full_name",
+      "transform": "trim",
+      "confidence": 0.98,
+      "reason": "Direct name field"
+    },
+    {
+      "source": "Email Address",
+      "target": "email",
+      "transform": "email",
+      "confidence": 0.99,
+      "reason": "Primary email"
+    },
+    {
+      "source": "Alternate Email",
+      "target": "alternate_email",
+      "transform": "email",
+      "confidence": 0.9,
+      "reason": "Secondary email"
+    },
+    {
+      "source": "Phone Number",
+      "target": "phone",
+      "transform": "phone",
+      "confidence": 0.96,
+      "reason": "Primary phone"
+    },
+    {
+      "source": "Secondary Phone",
+      "target": "secondary_phone",
+      "transform": "phone",
+      "confidence": 0.88,
+      "reason": "Secondary phone"
+    },
+    {
+      "source": "Date of Birth",
+      "target": "dob",
+      "transform": "date",
+      "confidence": 0.97,
+      "reason": "Birth date"
+    },
+    {
+      "source": "Hire Date",
+      "target": "hire_date",
+      "transform": "date",
+      "confidence": 0.95,
+      "reason": "Hire date"
+    },
+    {
+      "source": "Street Address",
+      "target": "address",
+      "transform": "trim",
+      "confidence": 0.92,
+      "reason": "Address field"
+    },
+    {
+      "source": "Company Name",
+      "target": "company_name",
+      "transform": "trim",
+      "confidence": 0.94,
+      "reason": "Company"
+    },
+    {
+      "source": "Department",
+      "target": "department",
+      "transform": "trim",
+      "confidence": 0.93,
+      "reason": "Department for filtering"
+    },
+    {
+      "source": "Notes",
+      "target": "notes",
+      "transform": "trim",
+      "confidence": 0.85,
+      "reason": "Freeform notes"
+    },
+    {
+      "source": "EmptyCol",
+      "target": "",
+      "transform": "none",
+      "confidence": 0.1,
+      "reason": "Empty column - suggest dropping"
+    }
+  ]
+}
