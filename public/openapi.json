@@ -1,0 +1,74 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SeanOffice Public API",
+    "version": "0.2.0-ai-port",
+    "description": "Free public API for SeanOffice — sheets mapping, pdf watermark, ai extract. Rate limited 10 req/min. AGPL-3.0."
+  },
+  "servers": [{ "url": "https://sean-office.vercel.app" }],
+  "paths": {
+    "/api/v1/sheets/map": {
+      "post": {
+        "summary": "AI map spreadsheet columns",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "headers": { "type": "array", "items": { "type": "string" } },
+                  "sampleRows": { "type": "array", "items": { "type": "object" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Mappings" } }
+      }
+    },
+    "/api/v1/pdf/watermark": {
+      "post": {
+        "summary": "Watermark PDF (stub)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary" },
+                  "text": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Stub response" } }
+      }
+    },
+    "/api/v1/ai/extract": {
+      "post": {
+        "summary": "Extract structured items from text",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "content": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Summary + items" } }
+      }
+    },
+    "/api/ai/sheets/map": {
+      "post": { "summary": "Internal AI sheets map (gateway with fallback)", "responses": { "200": { "description": "Mappings + provider_chain" } } }
+    },
+    "/api/ai/image/translate": {
+      "post": { "summary": "AI translate image (Gemini Vision -> Groq fallback)", "responses": { "200": { "description": "detected_text + translated_text" } } }
+    }
+  }
+}

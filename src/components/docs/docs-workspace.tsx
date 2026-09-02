@@ -41,9 +41,10 @@ import {
   type FillValidation,
   type ParagraphEdit,
 } from "@/lib/docs-processor";
-import { Braces, Download, Eraser, Eye, FileSpreadsheet, FileText } from "lucide-react";
+import { AiImageTranslatePanel } from "@/components/ai/ai-image-translate-panel";
+import { Braces, Download, Eraser, Eye, FileSpreadsheet, FileText, Languages } from "lucide-react";
 
-type DocsTool = "fill" | "clean" | "extract" | "template" | null;
+type DocsTool = "fill" | "clean" | "extract" | "template" | "aiTranslate" | null;
 
 const MAX_TEMPLATE_UNDO = 50;
 
@@ -290,6 +291,12 @@ export function DocsWorkspace({
         active={activeTool === "template"}
         onClick={() => toggleTool("template")}
       />
+      <ToolbarIconButton
+        icon={<Languages />}
+        label="AI Translate"
+        active={activeTool === "aiTranslate"}
+        onClick={() => toggleTool("aiTranslate")}
+      />
     </>
   );
 
@@ -527,6 +534,11 @@ export function DocsWorkspace({
         fileName={fileName}
         onClose={() => setActiveTool(null)}
       />
+    ) : activeTool === "aiTranslate" ? (
+      <>
+        <ToolPanelHeader title="AI Translate Image" onClose={() => setActiveTool(null)} />
+        <AiImageTranslatePanel />
+      </>
     ) : null;
 
   const previewContent =

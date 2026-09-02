@@ -2,12 +2,12 @@
 
 Internal notes on architecture and current state. Update after major changes.
 
-**Last updated:** 2026-08-23 · **License:** AGPL-3.0-or-later
+**Last updated:** 2026-09-02 · **License:** AGPL-3.0-or-later · **Branch:** `feat/ai-gateway` (v0.2.0-ai-port)
 
 ## Overview
 
 Browser-based office tools by **Son Nguyen** ([@sonnld178](https://github.com/sonnld178)).  
-Stack: Next.js 15 · React 19 · TypeScript · Tailwind v4 · shadcn · zustand · pdf-lib · pdfjs · mammoth · xlsx.
+Stack: Next.js 15 · React 19 · TypeScript · Tailwind v4 · shadcn · zustand · pdf-lib · pdfjs · mammoth · xlsx · Vercel AI Gateway · Groq · Gemini 2.5 Flash Lite.
 
 ## UX pattern (Sheets / Word / PDF)
 
@@ -23,9 +23,9 @@ Shared components: `src/components/tool/tool-upload-screen.tsx`, `tool-workspace
 
 | Route | Tools (toolbar → right panel) |
 |-------|-------------------------------|
-| `/sheets` | Map · Review · Export |
-| `/word` | Fill · Clean · Extract |
-| `/pdf` | Watermark · Sign · Merge · Split · Pages · Compress · Extract |
+| `/sheets` | Map · **AI Map** · Review · Export |
+| `/word` | Fill · Clean · Extract · **AI Translate Image** |
+| `/pdf` | Watermark · Sign · Merge · Split · Pages · Compress · Extract · **AI Translate Image** |
 | `/workflows/hr-cv` | 5-step board (legacy; **in development** — UI links disabled with tooltip) |
 
 Legacy redirects: `/sheets/[step]` → `/sheets`, `/pdf/[mode]` → `/pdf`, `/docs` → `/word`
@@ -68,8 +68,31 @@ If `build` runs while `dev` is active, `.next` cache may corrupt — use `dev:cl
 
 Root `/docs/` in `.gitignore` is for local planning notes only — not the Word app route.
 
+
+## AI Gateway (v0.2.0-ai-port)
+
+- **Env:** src/lib/env.ts:1 iGatewayEnv() reads AI_GATEWAY_API_KEY (preferred) or GEMINI_API_KEY/GROQ_API_KEY fallback. See .env.example:1.
+- **Gateway:** src/lib/ai/gateway.ts:1 → allback.ts:1 → providers/gemini.ts:1 (Gateway i-gateway.vercel.sh/v1/chat/completions model google/gemini-2.5-flash-lite or direct generativelanguage.googleapis.com) → providers/groq.ts:1 (groq/compound-mini free No-limit). Fallback on 429/5xx, logs provider_chain.
+- **Routes:** src/app/api/ai/sheets/map/route.ts:1 (json_schema mappings), src/app/api/ai/image/translate/route.ts:1 (Vision + translate, 6MB limit, multipart + json). Rate limit 10/min via src/lib/ai/rate-limit.ts:1.
+- **UI:** Sheets sheets-workspace.tsx:45 AI Map button + preview diff; PDF pdf-workspace.tsx:64 (toolbar Languages → AiImageTranslatePanel), Word docs-workspace.tsx:46 same panel.
+- **Public API:** src/app/api/v1/sheets/map, pdf/watermark, i/extract + public/openapi.json:1.
+- **MCP:** src/mcp/server.ts:1 tools sheets_map, pdf_sign, i_translate_image (
+pm run mcp:dev).
+- **Tests:** 	ests/ai/gateway.test.ts:1 fallback 429→success, malformed, not_configured.
+
+## File map
+
+`
+src/lib/env.ts
+src/lib/ai/gateway.ts, providers/gemini.ts, providers/groq.ts, fallback.ts, rate-limit.ts
+src/app/api/ai/sheets/map/route.ts, src/app/api/ai/image/translate/route.ts
+src/app/api/v1/{sheets/map,pdf/watermark,ai/extract}/route.ts, public/openapi.json
+src/components/ai/ai-image-translate-panel.tsx
+src/mcp/server.ts, tests/ai/gateway.test.ts
+`
+
 ## Status
 
-**Shipped:** PDF editor + utilities, SmallPDF-style page sidebar, overlay rotation fix, hero uploads, sticky toolbars, EN/VI switcher, HR CV marked in-dev, Apply-all feedback, `/word` route, AGPL license.  
-**Backlog:** HR CV upload-first refactor, server-mode production wiring, remove legacy PDF board components.
+**Shipped:** PDF editor + utilities, SmallPDF-style page sidebar, overlay rotation fix, hero uploads, sticky toolbars, EN/VI switcher, HR CV in-dev, Apply-all feedback, `/word` route, AGPL license, **AI Enhance v0.2.0:** gateway (Gemini→Groq fallback, 20s timeout, json_schema strict), Sheets AI Map (diff preview), PDF/Word AI Translate Image (Vision + canvas overlay), rate limit 10/min, public API + MCP, eval tests.
+**Backlog:** HR CV upload-first refactor, server-mode production wiring, remove legacy PDF board components, FLUX image-gen for translate background.
 

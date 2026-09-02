@@ -42,9 +42,17 @@ import {
 import { downloadSeanOfficeBlob } from "@/lib/download-names";
 import { usePreviewZoom } from "@/hooks/use-preview-zoom";
 import { useAppStore } from "@/store/app-store";
-import { BrushCleaning, Download, Filter, GitCompare, ListChecks } from "lucide-react";
+import { BrushCleaning, Download, Filter, GitCompare, ListChecks, Sparkles } from "lucide-react";
 
 type SheetsTool = "map" | "review" | "export" | "filter" | "clean" | null;
+
+type AiMappingSuggestion = {
+  source: string;
+  target: string;
+  transform: "none" | "trim" | "email" | "phone" | "date";
+  confidence?: number;
+  reason?: string;
+};
 
 interface SheetsWorkspaceProps {
   fileName: string;
@@ -66,6 +74,11 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
   const [filterOp, setFilterOp] = useState<FilterOp>("contains");
   const [filterValue, setFilterValue] = useState("");
   const [filterActive, setFilterActive] = useState(false);
+
+  const [aiSuggestions, setAiSuggestions] = useState<AiMappingSuggestion[] | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiProvider, setAiProvider] = useState<string | null>(null);
 
   const [cleanRemoveEmptyRows, setCleanRemoveEmptyRows] = useState(true);
   const [cleanTrimCells, setCleanTrimCells] = useState(true);
@@ -147,6 +160,44 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     }
   };
 
+  const handleAiMap = async () => {
+    if (!sheetsHeaders.length) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiProvider(null);
+    try {
+      const sampleRows = sheetsRows.slice(0, 3);
+      const res = await fetch("/api/ai/sheets/map", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ headers: sheetsHeaders, sampleRows }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "AI Map failed");
+      const suggestions: AiMappingSuggestion[] = json.mappings ?? [];
+      setAiSuggestions(suggestions);
+      setAiProvider(json.provider ?? null);
+      if (json.provider_chain) {
+        // keep for toast/log
+      }
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "AI Map failed");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const applyAiSuggestions = () => {
+    if (!aiSuggestions?.length) return;
+    const next = aiSuggestions.map((s) => ({
+      source: s.source,
+      target: s.target,
+      transform: s.transform,
+    }));
+    setSheetsMappings(next);
+    setAiSuggestions(null);
+  };
+
   const exportData = filteredData;
 
   const toolbar = (
@@ -156,6 +207,12 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
         label={t("map.title").replace(/^\d+\s·\s/, "")}
         active={activeTool === "map"}
         onClick={() => toggleTool("map")}
+      />
+      <ToolbarIconButton
+        icon={<Sparkles />}
+        label="AI Map"
+        active={false}
+        onClick={() => void handleAiMap()}
       />
       <ToolbarIconButton
         icon={<Filter />}
@@ -213,6 +270,47 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
           </Button>
           {mappingError ? (
             <p className="text-xs text-destructive">{mappingError}</p>
+          ) : null}
+        </div>
+
+        <div className="my-3 rounded-lg border bg-muted/20 p-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+            <Sparkles className="size-3.5 text-primary" /> AI Map
+            {aiProvider ? (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{aiProvider}</span>
+            ) : null}
+          </div>
+          <p className="mb-2 text-[11px] text-muted-foreground">Đoán schema tự động từ headers + 3 dòng đầu. Thử Gemini → Groq fallback.</p>
+          <SparkHoverButton
+            size="sm"
+            className="w-full"
+            disabled={aiLoading || !sheetsHeaders.length}
+            onClick={() => void handleAiMap()}
+          >
+            {aiLoading ? "AI đang đoán…" : "AI Map — Gợi ý mapping"}
+          </SparkHoverButton>
+          {aiError ? <p className="mt-2 text-xs text-destructive">{aiError}</p> : null}
+          {aiSuggestions ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-medium">Preview gợi ý ({aiSuggestions.length}):</p>
+              <div className="max-h-40 space-y-1 overflow-auto rounded border bg-background p-2">
+                {aiSuggestions.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="truncate font-mono">{s.source} → {s.target}</span>
+                    <span className="shrink-0 rounded bg-muted px-1 py-0.5">{s.transform}</span>
+                    {s.confidence != null ? <span className="text-muted-foreground">{Math.round(s.confidence * 100)}%</span> : null}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" className="flex-1" onClick={applyAiSuggestions}>
+                  Áp dụng
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setAiSuggestions(null)}>
+                  Bỏ qua
+                </Button>
+              </div>
+            </div>
           ) : null}
         </div>
         <div className="space-y-3">

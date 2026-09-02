@@ -40,12 +40,14 @@ import {
   insertPdfAt,
   rotatePdfPages,
 } from "@/lib/pdf-tools";
+import { AiImageTranslatePanel } from "@/components/ai/ai-image-translate-panel";
 import { downloadSeanOfficeBlob } from "@/lib/download-names";
 import {
   Check,
   Copy,
   Download,
   Droplets,
+  Languages,
   FileSpreadsheet,
   FileText,
   GitMerge,
@@ -61,7 +63,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 
-type ToolPanel = PdfSidebarTool | null;
+type ToolPanel = PdfSidebarTool | "aiTranslate" | null;
 type WatermarkMode = "text" | "image";
 
 const DEFAULT_SIG = { width: 140, height: 48 };
@@ -803,6 +805,7 @@ export function PdfWorkspace({
   const showSidebar =
     panel || (selectedOverlay && supportsOpacity(selectedOverlay));
   const isEditPanel = panel === "watermark" || panel === "signature";
+  const isAiTranslatePanel = panel === "aiTranslate";
   const isUtilityPanel =
     panel === "merge" ||
     panel === "split" ||
@@ -888,6 +891,12 @@ export function PdfWorkspace({
             label={t("toolExtract")}
             active={panel === "extract"}
             onClick={() => togglePanel("extract")}
+          />
+          <ToolbarIconButton
+            icon={<Languages />}
+            label="AI Translate"
+            active={panel === "aiTranslate"}
+            onClick={() => togglePanel("aiTranslate")}
           />
           <ToolbarIconButton
             icon={<Save />}
@@ -976,6 +985,12 @@ export function PdfWorkspace({
 
         {showSidebar && (
           <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-card p-4 sm:w-56 sm:border-l sm:border-t-0 md:w-72">
+            {isAiTranslatePanel && (
+              <>
+                <ToolPanelHeader title="AI Translate Image" onClose={() => setPanel(null)} />
+                <AiImageTranslatePanel />
+              </>
+            )}
             {isUtilityPanel && panel && (
               <>
                 <ToolPanelHeader
