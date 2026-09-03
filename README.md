@@ -61,19 +61,19 @@ npm run dev:clean
 
 ## Stack
 
-Next.js 15 · Tailwind v4 · shadcn/ui · pdf-lib · pdfjs · mammoth · xlsx · Vercel AI Gateway
+Next.js 15 · Tailwind v4 · shadcn/ui · pdf-lib · pdfjs · mammoth · xlsx · Vercel AI Gateway · OmniRoute
 
 ## AI Enhance (v0.2.0-ai-port)
 
-- **Gateway:** `src/lib/ai/gateway.ts` — single `AI_GATEWAY_API_KEY` via Vercel AI Gateway → `Gemini 2.5 Flash Lite` (1k req/day free) → `Groq compound-mini` (No limit) → deepseek fallback. Timeout 20s, retry 429/5xx, logs `provider_chain`.
+- **Combo Gateway:** `src/lib/ai/gateway.ts` + `src/lib/ai/fallback.ts` → `OmniRoute VPS` (`http://187.52.126.101:20128`, KVM2 2CPU/8GB + 2GB swap, free, tự host `diegosouzapw/omniroute:3.8.50`) **→** `Vercel AI Gateway` (`AI_GATEWAY_API_KEY`, $5 unlock, optional) **→** `Gemini 2.5 Flash Lite` (1k req/ngày) / `Groq compound-mini` (No-limit) direct. Timeout 20s, retry `server_busy`/`429`/`402`/`503`/`529`/5xx, log `provider_chain`, circuit breaker.
 - **Sheets AI Map:** `src/app/api/ai/sheets/map/route.ts` + `sheets-workspace.tsx` AI Map button with diff preview.
-- **Image Translate:** `src/app/api/ai/image/translate/route.ts` + `src/components/ai/ai-image-translate-panel.tsx` (PDF & Word toolbars) — Gemini Vision OCR + translate, canvas overlay preserves layout.
+- **Image Translate:** `src/app/api/ai/image/translate/route.ts` + `src/components/ai/ai-image-translate-panel.tsx` (PDF & Word toolbars) — Gemini Vision OCR + translate, canvas overlay preserves layout (không tốn image gen).
 - **Rate limit:** 10 req/min per IP (`src/lib/ai/rate-limit.ts`, mirrors `day-frame` ai_runs pattern).
 - **Public API:** `POST /api/v1/sheets/map`, `/api/v1/pdf/watermark`, `/api/v1/ai/extract`, `public/openapi.json`.
 - **MCP Server:** `src/mcp/server.ts` — tools `sheets_map`, `pdf_sign`, `ai_translate_image`, run `npm run mcp:dev` for Claude/Cursor.
-- **Tests:** `tests/ai/gateway.test.ts` — mock fetch, fallback 429→success.
+- **Tests:** `tests/ai/gateway.test.ts` — mock fetch, fallback `server_busy`/`429`→success.
 
-**Env:** see `.env.example` — set `AI_GATEWAY_API_KEY` (or `GEMINI_API_KEY`/`GROQ_API_KEY` fallback) in Vercel Env (Production + Preview + Development).
+**Env:** see `.env.example` — combo demo: `OMNIROUTE_BASE_URL=http://187.52.126.101:20128` (primary free), `GEMINI_API_KEY`/`GROQ_API_KEY` fallback, `AI_GATEWAY_API_KEY` optional ($5). Set trong Vercel Env (Production + Preview + Development) và `.env.local`.
 
 ## Stack
 

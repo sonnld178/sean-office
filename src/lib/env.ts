@@ -10,10 +10,12 @@ export function appUrl(): string {
 }
 
 /**
- * AI Gateway env — single key via Vercel AI Gateway or direct provider keys.
- * Priority: AI_GATEWAY_API_KEY (preferred) -> GEMINI_API_KEY / GROQ_API_KEY fallback.
+ * AI Gateway env — OmniRoute VPS + Vercel AI Gateway + direct provider keys.
+ * Priority: OMNIROUTE (VPS 187.52.126.101:20128) -> AI_GATEWAY_API_KEY -> GEMINI/GROQ direct.
  */
 export interface AiGatewayEnv {
+  omniBaseUrl?: string;
+  omniKey?: string;
   gatewayKey?: string;
   geminiKey?: string;
   groqKey?: string;
@@ -23,6 +25,8 @@ export interface AiGatewayEnv {
 }
 
 export function aiGatewayEnv(): AiGatewayEnv {
+  const omniBaseUrl = optional("OMNIROUTE_BASE_URL") ?? optional("OMNI_BASE_URL");
+  const omniKey = optional("OMNIROUTE_API_KEY") ?? optional("OMNI_API_KEY");
   const gatewayKey = optional("AI_GATEWAY_API_KEY");
   const geminiKey = optional("GEMINI_API_KEY");
   const groqKey = optional("GROQ_API_KEY");
@@ -33,9 +37,11 @@ export function aiGatewayEnv(): AiGatewayEnv {
   const legacyOpenrouter = optional("OPENROUTER_API_KEY");
 
   const hasKey =
-    !!gatewayKey || !!geminiKey || !!groqKey || !!legacyOpenrouter;
+    !!omniBaseUrl || !!omniKey || !!gatewayKey || !!geminiKey || !!groqKey || !!legacyOpenrouter;
 
   return {
+    omniBaseUrl: omniBaseUrl ?? "http://187.52.126.101:20128",
+    omniKey,
     gatewayKey: gatewayKey ?? legacyOpenrouter,
     geminiKey,
     groqKey,

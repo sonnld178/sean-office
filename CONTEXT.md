@@ -7,7 +7,7 @@ Internal notes on architecture and current state. Update after major changes.
 ## Overview
 
 Browser-based office tools by **Son Nguyen** ([@sonnld178](https://github.com/sonnld178)).  
-Stack: Next.js 15 · React 19 · TypeScript · Tailwind v4 · shadcn · zustand · pdf-lib · pdfjs · mammoth · xlsx · Vercel AI Gateway · Groq · Gemini 2.5 Flash Lite.
+Stack: Next.js 15 · React 19 · TypeScript · Tailwind v4 · shadcn · zustand · pdf-lib · pdfjs · mammoth · xlsx · OmniRoute VPS (187.52.126.101:20128, KVM2 2CPU/8GB+2GB swap) · Vercel AI Gateway · Groq/Gemini direct.
 
 ## UX pattern (Sheets / Word / PDF)
 
@@ -69,16 +69,16 @@ If `build` runs while `dev` is active, `.next` cache may corrupt — use `dev:cl
 Root `/docs/` in `.gitignore` is for local planning notes only — not the Word app route.
 
 
-## AI Gateway (v0.2.0-ai-port)
+## AI Gateway (v0.2.0-ai-port) — Combo OmniRoute VPS + Vercel + Direct
 
-- **Env:** src/lib/env.ts:1 iGatewayEnv() reads AI_GATEWAY_API_KEY (preferred) or GEMINI_API_KEY/GROQ_API_KEY fallback. See .env.example:1.
-- **Gateway:** src/lib/ai/gateway.ts:1 → allback.ts:1 → providers/gemini.ts:1 (Gateway i-gateway.vercel.sh/v1/chat/completions model google/gemini-2.5-flash-lite or direct generativelanguage.googleapis.com) → providers/groq.ts:1 (groq/compound-mini free No-limit). Fallback on 429/5xx, logs provider_chain.
-- **Routes:** src/app/api/ai/sheets/map/route.ts:1 (json_schema mappings), src/app/api/ai/image/translate/route.ts:1 (Vision + translate, 6MB limit, multipart + json). Rate limit 10/min via src/lib/ai/rate-limit.ts:1.
-- **UI:** Sheets sheets-workspace.tsx:45 AI Map button + preview diff; PDF pdf-workspace.tsx:64 (toolbar Languages → AiImageTranslatePanel), Word docs-workspace.tsx:46 same panel.
-- **Public API:** src/app/api/v1/sheets/map, pdf/watermark, i/extract + public/openapi.json:1.
-- **MCP:** src/mcp/server.ts:1 tools sheets_map, pdf_sign, i_translate_image (
-pm run mcp:dev).
-- **Tests:** 	ests/ai/gateway.test.ts:1 fallback 429→success, malformed, not_configured.
+- **Env:** src/lib/env.ts:1 iGatewayEnv() đọc OMNIROUTE_BASE_URL (default http://187.52.126.101:20128, KVM2 Malaysia) + OMNIROUTE_API_KEY (optional), AI_GATEWAY_API_KEY ($5 optional), GEMINI_API_KEY/GROQ_API_KEY direct free. hasKey true nếu có bất kỳ key nào.
+- **Provider:** src/lib/ai/providers/omniroute.ts:1 (OpenAI-compatible POST {base}/v1/chat/completions, model google/gemini-2.5-flash-lite, handle server_busy/529/503), providers/gemini.ts:1 (Gateway i-gateway.vercel.sh hoặc direct generativelanguage.googleapis.com), providers/groq.ts:1 (groq/compound-mini).
+- **Fallback:** src/lib/ai/fallback.ts:1 chain omniroute --busy/402/429/5xx--> gemini --retry--> groq, isRetryable() gồm server_busy/402/403/529, log provider_chain, 20s timeout, json_schema strict.
+- **Routes:** src/app/api/ai/sheets/map/route.ts:1 (json_schema mappings), src/app/api/ai/image/translate/route.ts:1 (Vision, 6MB), rate limit 10/min src/lib/ai/rate-limit.ts:1.
+- **UI:** Sheets sheets-workspace.tsx:45 AI Map diff, PDF pdf-workspace.tsx:64 + Word docs-workspace.tsx:46 AiImageTranslatePanel.
+- **Infra VPS:** KVM2 2CPU/8GB + 2GB swap (/swapfile, ree -h available 2.0Gi), docker ps 7 containers, swapon 2G, drop_caches done — đủ demo <10 user, panel 72% là used gồm cache, không tính swap.
+- **Public API:** src/app/api/v1/... + public/openapi.json:1, **MCP:** src/mcp/server.ts:1.
+- **Tests:** 	ests/ai/gateway.test.ts:1 (busy/429→success).
 
 ## File map
 
