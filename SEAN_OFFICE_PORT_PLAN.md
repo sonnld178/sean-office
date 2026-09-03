@@ -105,4 +105,34 @@ HF_TOKEN=
 3. Khi Phase 1 xong, tag `v0.2.0-ai-port` và gửi link Vercel + GitHub cho HR/Tech.
 
 ---
+
+## 11) Nhật ký thực thi (Chat 2026-09-03) — Double fallback + OmniRoute VPS
+
+**Bối cảnh:** Repo `sonnld178/sean-office` clone vào `D:\1. Sơn work\1.Webapp`, branch `feat/ai-gateway` (từ `master a2ac5e1`). Thực thi song song không conflict, giữ tên branch chuyên nghiệp (solo). `git push` 3 lần: `9f8f736` (AI Gateway), `1bd434c` (samples), `67801c5` (OmniRoute combo).
+
+**Đã build (Phase 1+2) — song song 4 nhóm file:**
+- `src/lib/env.ts:1` — `aiGatewayEnv()` hỗ trợ `OMNIROUTE_BASE_URL` (default `http://187.52.126.101:20128`), `OMNIROUTE_API_KEY`, `AI_GATEWAY_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `hasKey`. `.env.example:1` cập nhật combo `OMNIROUTE_BASE_URL` + fallback keys.
+- `src/lib/ai/gateway.ts:1`, `providers/gemini.ts:1` (Gateway `ai-gateway.vercel.sh` + direct `generativelanguage.googleapis.com`), `providers/groq.ts:1` (`groq/compound-mini`), `providers/omniroute.ts:1` (OpenAI-compatible `POST {base}/v1/chat/completions`, model `google/gemini-2.5-flash-lite`, handle `server_busy`/`529`/`503`), `fallback.ts:1` chain `omniroute --busy/402/429/5xx--> gemini --> groq`, `isRetryable()` gồm `server_busy`/`402`/`403`/`529`, timeout 20s, `json_schema` strict, `provider_chain` log, `rate-limit.ts:1` 10 req/phút.
+- **Sheets AI Map:** `src/app/api/ai/sheets/map/route.ts:1` + `src/components/sheets/sheets-workspace.tsx:45` thêm nút `AI Map` (Sparkles) cạnh Map, diff preview, badge `provider`, apply. `POST` nhận `headers` + `sampleRows` → gateway.
+- **Image Translate:** `src/app/api/ai/image/translate/route.ts:1` (Vision, multipart/json, 6MB) + `src/components/ai/ai-image-translate-panel.tsx:1` dùng chung `pdf-workspace.tsx:64` (`Languages` → `aiTranslate`) và `docs-workspace.tsx:46`, canvas overlay giữ layout.
+- **Public API + MCP:** `src/app/api/v1/sheets/map`, `pdf/watermark`, `ai/extract` + `public/openapi.json:1` + `src/mcp/server.ts:1` (`sheets_map`, `pdf_sign`, `ai_translate_image`, `npm run mcp:dev`) + `tests/ai/gateway.test.ts:1` (fallback 429→groq, busy, not_configured).
+- **Build:** `npm install` + `npm run build` 25/25 static, 23.9s, chỉ warning legacy, First Load 102KB.
+
+**Vercel AI Gateway config (đã thử):**
+- Tạo key `SeanOffice ...37acxC` trong `AI Gateway → API Keys`. `Bring Your Own Key` → `Google`/`Groq` → gặp `HTTP 403 Verification Required: AI Gateway requires valid credit card` → chưa gắn CC nên chưa unlock free credits. **Quyêt:** Dùng direct keys fallback, không cần CC cho demo. $5/tháng cho Vercel chỉ để unlock Gateway (pass-through BYOK không tốn token), demo HR <100 call/tháng thì free tier đủ (Gemini 1k/ngày, Groq No-limit).
+
+**Image gen:** So sánh `gpt-image` ($0.02-0.04) vs `flux-schnell` ($0.002-0.003, 10x rẻ, có trên Gateway `black-forest-labs/flux-schnell` via `HF_TOKEN`) vs `sdxl`/`ideogram`. Quyết giữ **canvas overlay** (0$) cho bill, chưa gen nền.
+
+**VPS Hostinger KVM2 (187.52.126.101, srv1929419.hstgr.cloud, Malaysia-KL, 2CPU/8GB/100GB/8TB, Ubuntu 24.04 + Coolify, 8 ngày uptime):**
+- Panel `Sử dụng bộ nhớ 72%` (5.8Gi/7.8Gi), `free -h` trước 5.8Gi used 682Mi free 1.9Gi available, `docker ps` 7 containers (`omniroute`, `coolify`, `coolify-db`, `coolify-redis`, `traefik`, `sentinel`, `realtime`), `swapon 0B`, `docker system df` 8.032GB images.
+- **Tối ưu:** Tạo swap 2GB `dd if=/dev/zero bs=1M count=2048 status=none` → `truncate -s 2G` sparse bị `swapon: skipping holes`, đổi sang `dd` 1G + `truncate -s 2G` → `chmod 600` → `mkswap` (2GiB UUID) → `swapon` → `free -h Swap:2.0Gi`, `swapon --show /swapfile 2G`, `sync; echo 3 > drop_caches` → free 2.0Gi, available 2.1Gi, panel vẫn 72% vì `used` gồm cache (Hostinger không tính swap). `docker prune` Reclaimable 0B, `docker update --memory` treo nên để Coolify UI set limit sau. Đã đóng SSH `Posh-SSH`, pass `IYRQ'(aNivK56iUO` (cũ `Nhung041099@@` bị `Permission denied`).
+
+**OmniRoute combo (quyết double fallback):**
+- Domain OmniRoute: `https://synapi.tech/` (đã gắn, thay `http://187.52.126.101:20128`), port host `20128/tcp` (`docker-proxy`), `ss -tlnp` 20128, Coolify self-host `diegosouzapw/omniroute:3.8.50`.
+- Thảo luận: `omirouter` = **OmniRoute** gateway tự host, có fallback nội bộ hàng trăm model free (Groq, Gemini...). User sẽ add `GROQ_API_KEY` + `GEMINI_API_KEY` ngay trong OmniRoute, tạo group `sean-office-combo` (`gemini-2.5-flash-lite` → `groq/compound-mini` → ...). **Quyết:** Dùng **double fallback** cho yên tâm: **OmniRoute (primary, `synapi.tech`) → Vercel Gateway $5 (optional) → Direct Gemini/Groq** (`fallback.ts` đã handle `server_busy`/`402`). Webapp chỉ cần `OMNIROUTE_BASE_URL=https://synapi.tech` + fallback keys, ít key nhất.
+- Chưa code thêm — chỉ cập nhật docs, giữ code `67801c5` đã support OmniRoute.
+
+**Trạng thái cuối chat:** Branch `feat/ai-gateway` @ `67801c5` đã push `origin/feat/ai-gateway`, `master` ở `a2ac5e1`, `localhost:3000` Next 15.5.23 Turbopack ready, `npm run build` xanh. Tiếp theo: điền Vercel Env `OMNIROUTE_BASE_URL=https://synapi.tech` + `GEMINI/GROQ` fallback, test `POST /api/ai/sheets/map` và `/api/ai/image/translate` qua domain mới.
+
+---
 *Plan này được tạo từ `day-frame/docs` để mang sang repo `sean-office`. Không chứa logic thu phí.*
