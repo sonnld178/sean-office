@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { SheetRow } from "@/store/app-store";
 import { SparkHoverButton } from "@/components/SparkHoverButton";
 import { Button } from "@/components/ui/button";
@@ -29,16 +29,13 @@ import {
   ToolWorkspaceShell,
 } from "@/components/tool/tool-workspace-shell";
 import {
-  applyMappings,
   cleanRows,
   countIssuesByRule,
   detectReviewRules,
   deterministicFixes,
   exportCsv,
-  exportMappingJson,
   exportXlsx,
   filterRows,
-  parseMappingJson,
   runReviewChecks,
   type FilterOp,
   type ReviewIssue,
@@ -47,17 +44,9 @@ import {
 import { downloadSeanOfficeBlob } from "@/lib/download-names";
 import { usePreviewZoom } from "@/hooks/use-preview-zoom";
 import { useAppStore } from "@/store/app-store";
-import { BrushCleaning, ChevronDown, ChevronRight, Download, Filter, GitCompare, ListChecks, Sparkles, X } from "lucide-react";
+import { BrushCleaning, ChevronDown, ChevronRight, Download, Filter, ListChecks, Sparkles, X } from "lucide-react";
 
-type SheetsTool = "map" | "review" | "export" | "filter" | "clean" | null;
-
-type AiMappingSuggestion = {
-  source: string;
-  target: string;
-  transform: "none" | "trim" | "email" | "phone" | "date";
-  confidence?: number;
-  reason?: string;
-};
+type SheetsTool = "review" | "export" | "filter" | "clean" | null;
 
 interface SheetsWorkspaceProps {
   fileName: string;
@@ -66,9 +55,9 @@ interface SheetsWorkspaceProps {
 
 export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
   const t = useTranslations("sheets");
-  const mappingInputRef = useRef<HTMLInputElement>(null);
+  const locale = useLocale();
   const [activeTool, setActiveTool] = useState<SheetsTool>(null);
-  const [processed, setProcessed] = useState<ReturnType<typeof applyMappings>>(
+  const [processed, setProcessed] = useState<SheetRow[]>(
     []
   );
   const [reviewRules, setReviewRules] = useState<ReviewRule[] | null>(null);
@@ -112,17 +101,11 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     rows: SheetRow[];
   } | null>(null);
   const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
-  const [mappingError, setMappingError] = useState("");
 
   const [filterColumn, setFilterColumn] = useState("");
   const [filterOp, setFilterOp] = useState<FilterOp>("contains");
   const [filterValue, setFilterValue] = useState("");
   const [filterActive, setFilterActive] = useState(false);
-
-  const [aiSuggestions, setAiSuggestions] = useState<AiMappingSuggestion[] | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [aiProvider, setAiProvider] = useState<string | null>(null);
 
   const [cleanRemoveEmptyRows, setCleanRemoveEmptyRows] = useState(true);
   const [cleanTrimCells, setCleanTrimCells] = useState(true);
@@ -179,15 +162,10 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
   const {
     sheetsHeaders,
     sheetsRows,
-    sheetsMappings,
     setSheetsData,
-    setSheetsMappings,
   } = useAppStore();
 
-  const mapped = useMemo(
-    () => applyMappings(sheetsRows, sheetsMappings),
-    [sheetsRows, sheetsMappings]
-  );
+  const mapped = sheetsRows;
 
   const baseData = processed.length ? processed : mapped;
 
@@ -257,7 +235,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     const issues = reviewIssues.filter((i) => i.ruleId === rule.id).slice(0, 50);
     if (!issues.length || !reviewRules) return;
     // 1) Deterministic local fixes appear instantly — no waiting.
-    const det = deterministicFixes(mapped, issues, reviewRules);
+    const det = deterministicFixes(mapped, issues, reviewRules, locale);
     const detRows = new Set(det.map((d) => d.rowIndex));
     const aiIssues = issues.filter((i) => !detRows.has(i.rowIndex));
     setFixDiff({
@@ -302,6 +280,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
           column: rule.column,
           ruleId: rule.id,
           ruleLabel: rule.label,
+          locale,
           issues: aiIssues.map((i) => ({
             rowIndex: i.rowIndex,
             column: i.column,
@@ -413,11 +392,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
         toDelete.push(f.rowIndex);
         continue;
       }
-      const m =
-        sheetsMappings.find((mm) => mm.target === f.column) ??
-        sheetsMappings.find((mm) => mm.source === f.column);
-      const src = m ? m.source : f.column;
-      if (next[f.rowIndex]) next[f.rowIndex] = { ...next[f.rowIndex], [src]: f.newValue ?? "" };
+      if (next[f.rowIndex]) next[f.rowIndex] = { ...next[f.rowIndex], [f.column]: f.newValue ?? "" };
     }
     toDelete
       .sort((a, b) => b - a)
@@ -427,7 +402,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     setSheetsData(sheetsHeaders, next);
     setProcessed([]);
     setFixDiff(null);
-    if (reviewRules) setReviewIssues(runReviewChecks(applyMappings(next, sheetsMappings), reviewRules));
+    if (reviewRules) setReviewIssues(runReviewChecks(next, reviewRules));
   };
 
   const undoFix = () => {
@@ -435,8 +410,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     setSheetsData(undoSnapshot.headers, undoSnapshot.rows);
     setUndoSnapshot(null);
     setProcessed([]);
-    if (reviewRules)
-      setReviewIssues(runReviewChecks(applyMappings(undoSnapshot.rows, sheetsMappings), reviewRules));
+    if (reviewRules) setReviewIssues(runReviewChecks(undoSnapshot.rows, reviewRules));
   };
 
   const applyFilter = () => {
@@ -460,75 +434,10 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     setReviewIssues([]);
   };
 
-  const handleImportMapping = async (file: File) => {
-    setMappingError("");
-    try {
-      const text = await file.text();
-      setSheetsMappings(parseMappingJson(text));
-    } catch {
-      setMappingError(t("importMappingError"));
-    }
-  };
-
-  const handleAiMap = async () => {
-    if (!sheetsHeaders.length) return;
-    setAiLoading(true);
-    setAiError(null);
-    setAiProvider(null);
-    try {
-      const sampleRows = sheetsRows.slice(0, 3);
-      const res = await fetch("/api/ai/sheets/map", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ headers: sheetsHeaders, sampleRows }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "AI Map failed");
-      const suggestions: AiMappingSuggestion[] = json.mappings ?? [];
-      setAiSuggestions(suggestions);
-      setAiProvider(json.provider ?? null);
-      if (json.provider_chain) {
-        // keep for toast/log
-      }
-    } catch (e) {
-      setAiError(e instanceof Error ? e.message : "AI Map failed");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const applyAiSuggestions = () => {
-    if (!aiSuggestions?.length) return;
-    const next = aiSuggestions.map((s) => ({
-      source: s.source,
-      target: s.target,
-      transform: s.transform,
-    }));
-    setSheetsMappings(next);
-    setAiSuggestions(null);
-  };
-
   const exportData = filteredData;
 
   const toolbar = (
     <>
-      <ToolbarIconButton
-        icon={<GitCompare />}
-        label={t("map.title").replace(/^\d+\s·\s/, "")}
-        tip={t("tipMap")}
-        active={activeTool === "map"}
-        onClick={() => toggleTool("map")}
-      />
-      <ToolbarIconButton
-        icon={<Sparkles />}
-        label="AI Map"
-        tip={t("tipAiMap")}
-        active={aiLoading || aiSuggestions !== null}
-        onClick={() => {
-          setActiveTool("map");
-          void handleAiMap();
-        }}
-      />
       <ToolbarIconButton
         icon={<Filter />}
         label={t("filter.title")}
@@ -561,118 +470,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
   );
 
   const rightPanel =
-    activeTool === "map" ? (
-      <>
-        <ToolPanelHeader
-          title={t("map.title").replace(/^\d+\s·\s/, "")}
-          onClose={() => setActiveTool(null)}
-        />
-        <p className="mb-3 text-xs text-muted-foreground">{t("map.howTo")}</p>
-        <div className="mb-3 flex flex-col gap-2">
-          <input
-            ref={mappingInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void handleImportMapping(file);
-              e.target.value = "";
-            }}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => mappingInputRef.current?.click()}
-          >
-            {t("importMapping")}
-          </Button>
-          {mappingError ? (
-            <p className="text-xs text-destructive">{mappingError}</p>
-          ) : null}
-        </div>
-
-        <div className="my-3 rounded-lg border bg-muted/20 p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
-            <Sparkles className="size-3.5 text-primary" /> AI Map
-            {aiProvider ? (
-              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{aiProvider}</span>
-            ) : null}
-          </div>
-          <p className="mb-2 text-[11px] text-muted-foreground">Đoán schema tự động từ headers + 3 dòng đầu. Thử Gemini → Groq fallback.</p>
-          <SparkHoverButton
-            size="sm"
-            className="w-full"
-            disabled={aiLoading || !sheetsHeaders.length}
-            onClick={() => void handleAiMap()}
-          >
-            {aiLoading ? "AI đang đoán…" : "AI Map — Gợi ý mapping"}
-          </SparkHoverButton>
-          {aiError ? <p className="mt-2 text-xs text-destructive">{aiError}</p> : null}
-          {aiSuggestions ? (
-            <div className="mt-3 space-y-2">
-              <p className="text-xs font-medium">Preview gợi ý ({aiSuggestions.length}):</p>
-              <div className="max-h-40 space-y-1 overflow-auto rounded border bg-background p-2">
-                {aiSuggestions.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
-                    <span className="truncate font-mono">{s.source} → {s.target}</span>
-                    <span className="shrink-0 rounded bg-muted px-1 py-0.5">{s.transform}</span>
-                    {s.confidence != null ? <span className="text-muted-foreground">{Math.round(s.confidence * 100)}%</span> : null}
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" className="flex-1" onClick={applyAiSuggestions}>
-                  Áp dụng
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setAiSuggestions(null)}>
-                  Bỏ qua
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-        <div className="space-y-3">
-          {sheetsMappings.map((m, i) => (
-            <div key={i} className="space-y-1">
-              <Input value={m.source} readOnly className="text-xs" />
-              <Input
-                value={m.target}
-                onChange={(e) => {
-                  const next = [...sheetsMappings];
-                  next[i] = { ...next[i], target: e.target.value };
-                  setSheetsMappings(next);
-                }}
-                className="text-xs"
-                placeholder={t("targetField")}
-              />
-              <Select
-                value={m.transform}
-                onValueChange={(v) => {
-                  const next = [...sheetsMappings];
-                  next[i] = {
-                    ...next[i],
-                    transform: v as typeof m.transform,
-                  };
-                  setSheetsMappings(next);
-                }}
-              >
-                <SelectTrigger className="text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t("none")}</SelectItem>
-                  <SelectItem value="trim">{t("trim")}</SelectItem>
-                  <SelectItem value="email">{t("email")}</SelectItem>
-                  <SelectItem value="phone">{t("phone")}</SelectItem>
-                  <SelectItem value="date">{t("date")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ))}
-        </div>
-      </>
-    ) : activeTool === "filter" ? (
+    activeTool === "filter" ? (
       <>
         <ToolPanelHeader
           title={t("filter.title")}
@@ -804,11 +602,11 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
           {visibleReviewIssues.length > 0 ? (
             (() => {
               const TYPE_LABEL: Record<string, string> = {
-                empty: "Missing",
-                email: "Email",
-                phone: "Phone",
-                date: "Date",
-                duplicate: "Duplicate",
+                empty: t("reviewTypeMissing"),
+                email: t("reviewTypeEmail"),
+                phone: t("reviewTypePhone"),
+                date: t("reviewTypeDate"),
+                duplicate: t("reviewTypeDuplicate"),
               };
               const typeGroups = (() => {
                 const byType = new Map<string, { type: string; total: number; byRule: Map<string, { rule: ReviewRule; issues: ReviewIssue[] }> }>();
@@ -1052,21 +850,6 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
             }
           >
             {t("exportXlsx")}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              downloadSeanOfficeBlob(
-                exportMappingJson(sheetsMappings),
-                "excel",
-                fileName,
-                "json",
-                "mapping"
-              )
-            }
-          >
-            {t("exportMapping")}
           </Button>
         </div>
       </>
