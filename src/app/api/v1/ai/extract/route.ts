@@ -37,6 +37,7 @@ export async function POST(req: Request) {
       user: body.content.slice(0, 4000),
       schema: { name: "extract", value: SCHEMA as unknown as Record<string, unknown> },
       temperature: 0.1,
+      prefer: "groq", // text-only task
     });
 
     const parsed = JSON.parse(result.content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));

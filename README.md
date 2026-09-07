@@ -65,7 +65,7 @@ Next.js 15 · Tailwind v4 · shadcn/ui · pdf-lib · pdfjs · mammoth · xlsx ·
 
 ## AI Enhance (v0.2.0-ai-port)
 
-- **Combo Gateway:** `src/lib/ai/gateway.ts` + `src/lib/ai/fallback.ts` → `OmniRoute VPS` (`http://187.52.126.101:20128`, KVM2 2CPU/8GB + 2GB swap, free, tự host `diegosouzapw/omniroute:3.8.50`) **→** `Vercel AI Gateway` (`AI_GATEWAY_API_KEY`, $5 unlock, optional) **→** `Gemini 2.5 Flash Lite` (1k req/ngày) / `Groq compound-mini` (No-limit) direct. Timeout 20s, retry `server_busy`/`429`/`402`/`503`/`529`/5xx, log `provider_chain`, circuit breaker.
+- **AI Gateway:** `src/lib/ai/gateway.ts` + `src/lib/ai/fallback.ts` → `Gemini 2.5 Flash Lite` (1k req/ngày) **→** `Groq compound-mini` (No-limit) direct, `Vercel AI Gateway` (`AI_GATEWAY_API_KEY`, $5 unlock, optional). Timeout 20s, retry `429`/5xx, log `provider_chain`.
 - **Sheets AI Map:** `src/app/api/ai/sheets/map/route.ts` + `sheets-workspace.tsx` AI Map button with diff preview.
 - **Image Translate:** `src/app/api/ai/image/translate/route.ts` + `src/components/ai/ai-image-translate-panel.tsx` (PDF & Word toolbars) — Gemini Vision OCR + translate, canvas overlay preserves layout (không tốn image gen).
 - **Rate limit:** 10 req/min per IP (`src/lib/ai/rate-limit.ts`, mirrors `day-frame` ai_runs pattern).
@@ -73,7 +73,7 @@ Next.js 15 · Tailwind v4 · shadcn/ui · pdf-lib · pdfjs · mammoth · xlsx ·
 - **MCP Server:** `src/mcp/server.ts` — tools `sheets_map`, `pdf_sign`, `ai_translate_image`, run `npm run mcp:dev` for Claude/Cursor.
 - **Tests:** `tests/ai/gateway.test.ts` — mock fetch, fallback `server_busy`/`429`→success.
 
-**Env:** see `.env.example` — combo demo: `OMNIROUTE_BASE_URL=http://187.52.126.101:20128` (primary free), `GEMINI_API_KEY`/`GROQ_API_KEY` fallback, `AI_GATEWAY_API_KEY` optional ($5). Set trong Vercel Env (Production + Preview + Development) và `.env.local`.
+**Env:** see `.env.example` — `GEMINI_API_KEY`/`GROQ_API_KEY` direct free, `AI_GATEWAY_API_KEY` optional ($5). Set trong Vercel Env (Production + Preview + Development) và `.env.local`.
 
 ## Stack
 

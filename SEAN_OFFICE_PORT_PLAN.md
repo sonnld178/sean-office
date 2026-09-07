@@ -135,4 +135,21 @@ HF_TOKEN=
 **Trạng thái cuối chat:** Branch `feat/ai-gateway` @ `67801c5` đã push `origin/feat/ai-gateway`, `master` ở `a2ac5e1`, `localhost:3000` Next 15.5.23 Turbopack ready, `npm run build` xanh. Tiếp theo: điền Vercel Env `OMNIROUTE_BASE_URL=https://synapi.tech` + `GEMINI/GROQ` fallback, test `POST /api/ai/sheets/map` và `/api/ai/image/translate` qua domain mới.
 
 ---
+## 12) Nhật ký 2026-09-07 — Bỏ OmniRoute, fix AI Map
+
+- **AI Map không hoạt động:** toolbar nút `AI Map` gọi API nhưng kết quả chỉ render trong panel `Map` (chưa mở) → user tưởng đơ. Fix `sheets-workspace.tsx`: bấm toolbar tự mở panel `Map` + active state khi loading/có gợi ý.
+- **API 503 `not_configured`:** localhost không có `.env` → `hasKey=false`. OmniRoute VPS + `synapi.tech` đều trả `401 AUTH_002` (đòi API key). **Quyết:** bỏ hẳn OmniRoute — xóa `providers/omniroute.ts`, chain còn `gemini → groq` (`fallback.ts`), `env.ts` chỉ còn gateway/gemini/groq keys, `.env.example` + README + CONTEXT cập nhật.
+- Tiếp theo: user dán `GEMINI_API_KEY` + `GROQ_API_KEY` vào `.env.local`, restart dev, test `POST /api/ai/sheets/map`.
+
+## 13) Nhật ký 2026-09-07 — Supabase seanoffice + Review v2 + AI queue
+
+- **Supabase:** CLI login ok (project cũ `sonnld178's Project` cùng org). Tạo project mới `seanoffice` (`wkhdfujxlniurcixbgkm`, Singapore, free — đủ cho queue, không cần nâng cấp). Keys gắn vào `.env.local`. Migration `supabase/migrations/2026090701_ai_jobs.sql` (bảng `ai_jobs`, RLS on, không public policy — browser gọi qua API route bằng service_role).
+- **AI provider fixes:** Gemini direct sanitize `additionalProperties`; chain luôn fallback sang provider còn lại; `gemini-2.5-flash-lite` retire → `gemini-3.5-flash-lite`; Groq model `groq/compound-mini` + `json_object` (không hỗ trợ `json_schema`).
+- **Groq-first:** `prefer: "groq"|"gemini"` trong `ProviderRequest` — text tasks (sheets map/fix, extract) groq trước, Vision giữ gemini.
+- **Review v2:** engine header-first (`detectReviewRules` + `runReviewChecks`, từ điển VI+EN, passcode không sinh rule phone, content-guess low-conf tắt mặc định), panel checkbox + đếm lỗi, bảng preview có cột `#` (số dòng Excel), click issue → scroll + highlight dòng/cell, filter che dòng thì báo.
+- **AI Bulk Fix + queue:** `POST /api/ai/sheets/fix` enqueue → worker in-process FIFO (`src/lib/ai/jobs.ts`) → `GET /api/ai/jobs/[id]?token=` poll 2s (position/ETA, upsell khi ETA>20s) → diff preview → apply + Undo snapshot.
+- **Tests:** `vitest.config.ts` alias `@` + stub `server-only`; 11/11 pass (gateway 4, review 4, jobs 3).
+
+---
+
 *Plan này được tạo từ `day-frame/docs` để mang sang repo `sean-office`. Không chứa logic thu phí.*

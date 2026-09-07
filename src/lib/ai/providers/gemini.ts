@@ -8,6 +8,12 @@ export type ProviderRequest = {
   maxTokens?: number;
   imageBase64?: string;
   imageMimeType?: string;
+  /**
+   * Provider order hint. "groq" tries Groq first (best for text-only tasks:
+   * higher free rate limit), "gemini" tries Gemini first (required for Vision).
+   * Default "gemini".
+   */
+  prefer?: "groq" | "gemini";
 };
 
 export type ProviderResult = {
@@ -123,7 +129,7 @@ export async function callGemini(
     return callOpenAICompatible({
       url: GATEWAY_URL,
       key: env.gatewayKey,
-      model: "google/gemini-2.5-flash-lite",
+      model: "google/gemini-3.5-flash-lite",
       body,
     });
   }
@@ -131,10 +137,24 @@ export async function callGemini(
   // Direct Gemini API fallback (Generative Language API)
   if (!env.geminiKey) throw new AIError("Gemini not configured.", "not_configured", false);
 
+  // Gemini responseSchema is a subset of JSON Schema: no additionalProperties.
+  const sanitizeForGemini = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(sanitizeForGemini);
+    if (node && typeof node === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+        if (k === "additionalProperties") continue;
+        out[k] = sanitizeForGemini(v);
+      }
+      return out;
+    }
+    return node;
+  };
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${env.geminiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${env.geminiKey}`;
     const parts: unknown[] = [{ text: `${req.system}\n\n${req.user}` }];
     if (req.imageBase64) {
       parts.push({
@@ -153,7 +173,7 @@ export async function callGemini(
           temperature: req.temperature ?? 0.1,
           maxOutputTokens: req.maxTokens ?? 1200,
           responseMimeType: req.schema ? "application/json" : "text/plain",
-          ...(req.schema ? { responseSchema: req.schema.value } : {}),
+          ...(req.schema ? { responseSchema: sanitizeForGemini(req.schema.value) } : {}),
         },
       }),
       signal: controller.signal,
@@ -175,7 +195,7 @@ export async function callGemini(
     if (!text) throw new AIError("Gemini returned empty response.", "empty", true);
     return {
       content: text,
-      model: "google/gemini-2.5-flash-lite",
+      model: "google/gemini-3.5-flash-lite",
       usage: json.usageMetadata
         ? {
             prompt_tokens: json.usageMetadata.promptTokenCount,

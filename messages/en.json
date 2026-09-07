@@ -63,17 +63,17 @@
     "map": {
       "title": "2 · Map",
       "preview": "Column mapping",
-      "howTo": "Map source columns to target fields and apply transforms."
+      "howTo": "Match columns to target fields, click Apply to get clean rows."
     },
     "review": {
       "title": "3 · Review",
       "preview": "Validate + merge",
-      "howTo": "Fix validation errors, merge duplicates, split rows."
+      "howTo": "Scan flagged errors, click AI Fix to get repaired rows."
     },
     "download": {
       "title": "4 · Download",
       "preview": "CSV / XLSX / JSON",
-      "howTo": "Export clean data and save mapping JSON for reuse."
+      "howTo": "Choose CSV/XLSX format, click Download to get the file."
     },
     "dropzone": "Drop CSV or XLSX here",
     "uploadDragHint": "or drag and drop anywhere in this area",
@@ -87,9 +87,33 @@
     "email": "Normalize email",
     "phone": "Normalize phone",
     "date": "Parse date",
-    "dedupe": "Remove duplicates by",
     "errors": "Validation issues",
     "noErrors": "No issues found",
+    "reviewRules": "Rules (header-detected)",
+    "reviewNoRules": "No rules detected. Map columns first, or add an AI rule.",
+    "reviewGuessed": "guessed from data — confirm",
+    "reviewIssues": "issues",
+    "reviewRow": "Row",
+    "focusHidden": "That row is hidden by the active filter — clear the filter to see it.",
+    "aiFix": "AI Fix",
+    "aiFixRunning": "Fixing…",
+    "aiFixSending": "Sending to queue…",
+    "aiFixAiWorking": "AI is fixing…",
+    "aiFixAiPending": "Quick fixes shown — AI is handling the rest…",
+    "aiFixLocal": "quick",
+    "aiFixTimeout": "Queue submit timed out (>10s). Check connection and retry.",
+    "aiFixError": "AI Fix failed",
+    "aiFixPreview": "Preview ({n} fixes)",
+    "aiFixApply": "Apply fixes",
+    "aiFixDiscard": "Discard",
+    "aiFixUndo": "Undo last AI fix",
+    "aiFixDeleteRow": "delete row",
+    "aiFixKeep": "keep",
+    "ignore": "Ignore",
+    "ignoreUndo": "Undo",
+    "ignored": "Ignored \"{label}\"",
+    "queueAhead": "Queue #{n} · ~{s}s left",
+    "queueUpgrade": "AI is busy — upgrade your account to skip the queue.",
     "exportCsv": "Download CSV",
     "exportXlsx": "Download XLSX",
     "exportMapping": "Download mapping JSON",
@@ -98,11 +122,11 @@
     "runReview": "Run review",
     "filter": {
       "title": "Filter",
-      "howTo": "Filter rows by column value. Applies to preview and export."
+      "howTo": "Pick column + condition, Apply filter to show matching rows."
     },
     "clean": {
       "title": "Clean",
-      "howTo": "Remove empty rows, trim values, or drop empty columns."
+      "howTo": "Tick clean options, Apply clean to get trimmed data."
     },
     "filterColumn": "Column",
     "filterCondition": "Condition",
@@ -117,7 +141,17 @@
     "cleanRemoveEmptyRows": "Remove empty rows",
     "cleanTrimCells": "Trim all values",
     "cleanRemoveEmptyColumns": "Remove empty columns",
-    "applyClean": "Apply clean"
+    "applyClean": "Apply clean",
+    "goExport": "Go to Export",
+    "reviewAllClean": "All clean! Export your file.",
+    "tipMap": "Map columns: match source columns to target fields",
+    "tipAiMap": "AI Map: auto-guess the mapping",
+    "tipFilter": "Filter: show only matching rows",
+    "tipClean": "Clean: remove empty rows, trim cells",
+    "tipReview": "Review: find errors and fix with AI",
+    "tipExport": "Export: download CSV / XLSX",
+    "rowLimitExceeded": "File has {n} rows — truncated to 500 for the portfolio demo. Please split larger files.",
+    "rowLimitInfo": "Showing first 500 of {n} rows"
   },
   "docs": {
     "title": "Word Tools",

@@ -14,8 +14,8 @@ export async function callGroq(
 
   const useGateway = !!env.gatewayKey;
   const url = useGateway ? GATEWAY_URL : GROQ_URL;
-  // Groq compound-mini is free No-limit; via gateway use groq/compound-mini, direct use compound-mini etc.
-  const model = useGateway ? "groq/compound-mini" : "compound-mini";
+  // Groq compound-mini is free No-limit; id is groq/compound-mini on both direct + gateway.
+  const model = "groq/compound-mini";
 
   const messages: Array<{ role: string; content: string | unknown[] }> = [
     { role: "system", content: req.system },
@@ -43,14 +43,9 @@ export async function callGroq(
     max_tokens: req.maxTokens ?? 1200,
   };
   if (req.schema) {
-    body.response_format = {
-      type: "json_schema",
-      json_schema: {
-        name: req.schema.name,
-        strict: true,
-        schema: req.schema.value,
-      },
-    };
+    // compound-mini does not support json_schema response format;
+    // json_object + prompt instruction + server-side parse is enough.
+    body.response_format = { type: "json_object" };
   }
 
   const controller = new AbortController();

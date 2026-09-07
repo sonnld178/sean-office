@@ -69,11 +69,11 @@ If `build` runs while `dev` is active, `.next` cache may corrupt — use `dev:cl
 Root `/docs/` in `.gitignore` is for local planning notes only — not the Word app route.
 
 
-## AI Gateway (v0.2.0-ai-port) — Combo OmniRoute VPS + Vercel + Direct
+## AI Gateway (v0.2.0-ai-port) — Gemini → Groq Direct (OmniRoute dropped 2026-09-07: VPS đòi auth 401)
 
-- **Env:** src/lib/env.ts:1 iGatewayEnv() đọc OMNIROUTE_BASE_URL (default http://187.52.126.101:20128, KVM2 Malaysia) + OMNIROUTE_API_KEY (optional), AI_GATEWAY_API_KEY ($5 optional), GEMINI_API_KEY/GROQ_API_KEY direct free. hasKey true nếu có bất kỳ key nào.
-- **Provider:** src/lib/ai/providers/omniroute.ts:1 (OpenAI-compatible POST {base}/v1/chat/completions, model google/gemini-2.5-flash-lite, handle server_busy/529/503), providers/gemini.ts:1 (Gateway i-gateway.vercel.sh hoặc direct generativelanguage.googleapis.com), providers/groq.ts:1 (groq/compound-mini).
-- **Fallback:** src/lib/ai/fallback.ts:1 chain omniroute --busy/402/429/5xx--> gemini --retry--> groq, isRetryable() gồm server_busy/402/403/529, log provider_chain, 20s timeout, json_schema strict.
+- **Env:** src/lib/env.ts:1 aiGatewayEnv() đọc AI_GATEWAY_API_KEY ($5 optional), GEMINI_API_KEY/GROQ_API_KEY direct free. hasKey true nếu có bất kỳ key nào.
+- **Provider:** providers/gemini.ts:1 (Gateway ai-gateway.vercel.sh hoặc direct generativelanguage.googleapis.com), providers/groq.ts:1 (groq/compound-mini).
+- **Fallback:** src/lib/ai/fallback.ts:1 chain gemini --retry--> groq, isRetryable() gồm 429/5xx, log provider_chain, 20s timeout, json_schema strict.
 - **Routes:** src/app/api/ai/sheets/map/route.ts:1 (json_schema mappings), src/app/api/ai/image/translate/route.ts:1 (Vision, 6MB), rate limit 10/min src/lib/ai/rate-limit.ts:1.
 - **UI:** Sheets sheets-workspace.tsx:45 AI Map diff, PDF pdf-workspace.tsx:64 + Word docs-workspace.tsx:46 AiImageTranslatePanel.
 - **Infra VPS:** KVM2 2CPU/8GB + 2GB swap (/swapfile, ree -h available 2.0Gi), docker ps 7 containers, swapon 2G, drop_caches done — đủ demo <10 user, panel 72% là used gồm cache, không tính swap.

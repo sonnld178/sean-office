@@ -13,17 +13,30 @@ export default function SheetsPage() {
   const t = useTranslations("sheets");
   const [fileName, setFileName] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [limitWarning, setLimitWarning] = useState<string | null>(null);
+  const [limitInfo, setLimitInfo] = useState<string | null>(null);
   const { setSheetsData, setSheetsMappings } = useAppStore();
 
   const handleNewFile = useCallback(() => {
     setLoaded(false);
     setFileName("");
+    setLimitWarning(null);
+    setLimitInfo(null);
     setSheetsData([], []);
     setSheetsMappings([]);
   }, [setSheetsData, setSheetsMappings]);
 
   return (
     <AppShell contentWidth="wide">
+      {limitWarning ? (
+        <div
+          role="alert"
+          className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+        >
+          <p className="font-medium">{limitWarning}</p>
+          {limitInfo ? <p className="mt-1 text-xs opacity-80">{limitInfo}</p> : null}
+        </div>
+      ) : null}
       {!loaded ? (
         <ToolUploadScreen
           title={t("title")}
@@ -42,7 +55,16 @@ export default function SheetsPage() {
             const res = await fetch(href);
             if (!res.ok) throw new Error("Failed to load sample");
             const buffer = await res.arrayBuffer();
-            const { headers, rows } = await parseSpreadsheet(buffer);
+            let { headers, rows } = await parseSpreadsheet(buffer);
+            if (rows.length > 500) {
+              const originalN = rows.length;
+              rows = rows.slice(0, 500);
+              setLimitWarning(t("rowLimitExceeded", { n: originalN }));
+              setLimitInfo(t("rowLimitInfo", { n: originalN }));
+            } else {
+              setLimitWarning(null);
+              setLimitInfo(null);
+            }
             setSheetsData(headers, rows);
             setSheetsMappings(
               headers.map((h) => ({
@@ -56,7 +78,16 @@ export default function SheetsPage() {
           }}
           onFiles={async (items, { setProgress }) => {
             setProgress(90);
-            const { headers, rows } = await parseSpreadsheet(items[0].buffer);
+            let { headers, rows } = await parseSpreadsheet(items[0].buffer);
+            if (rows.length > 500) {
+              const originalN = rows.length;
+              rows = rows.slice(0, 500);
+              setLimitWarning(t("rowLimitExceeded", { n: originalN }));
+              setLimitInfo(t("rowLimitInfo", { n: originalN }));
+            } else {
+              setLimitWarning(null);
+              setLimitInfo(null);
+            }
             setSheetsData(headers, rows);
             setSheetsMappings(
               headers.map((h) => ({

@@ -12,6 +12,7 @@ type ToolbarIconButtonProps = {
   disabled?: boolean;
   variant?: "outline" | "secondary" | "default" | "ghost";
   className?: string;
+  tip?: string;
 };
 
 export function ToolbarIconButton({
@@ -22,6 +23,7 @@ export function ToolbarIconButton({
   disabled = false,
   variant = "outline",
   className,
+  tip,
 }: ToolbarIconButtonProps) {
   const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
@@ -38,7 +40,7 @@ export function ToolbarIconButton({
     });
   };
 
-  return (
+  const button = (
     <motion.button
       type="button"
       aria-label={label}
@@ -105,5 +107,19 @@ export function ToolbarIconButton({
         </span>
       </span>
     </motion.button>
+  );
+
+  if (!tip) return button;
+
+  return (
+    <span className="group relative inline-flex">
+      {button}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 w-max max-w-44 -translate-x-1/2 rounded-md bg-zinc-900 px-2 py-1 text-center text-xs font-normal leading-snug text-zinc-50 opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 line-clamp-2"
+      >
+        {tip}
+      </span>
+    </span>
   );
 }

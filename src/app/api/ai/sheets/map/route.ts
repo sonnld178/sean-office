@@ -58,6 +58,7 @@ export async function POST(req: Request) {
       schema: { name: "sheets_map", value: MAP_SCHEMA as unknown as Record<string, unknown> },
       temperature: 0.1,
       maxTokens: 1200,
+      prefer: "groq", // text-only task: Groq first (higher free limit)
     });
 
     let parsed: { mappings: Array<{ source: string; target: string; transform: string; confidence?: number; reason?: string }> };

@@ -47,6 +47,27 @@ describe("gateway fallback", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("prefer groq tries groq first for text tasks", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({ mappings: [] }) } }],
+        model: "groq/compound-mini",
+      }),
+    } as unknown as Response);
+
+    const { completeWithFallback } = await import("@/lib/ai/fallback");
+    const res = await completeWithFallback({
+      system: "map",
+      user: "headers",
+      prefer: "groq",
+    });
+    expect(res.provider).toBe("groq");
+    expect(res.provider_chain).toEqual(["groq"]);
+    const firstBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(firstBody.model).toBe("groq/compound-mini");
+  });
+
   it("throws on malformed json_schema retryable", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -66,7 +87,10 @@ describe("gateway fallback", () => {
     delete process.env.GEMINI_API_KEY;
     delete process.env.GROQ_API_KEY;
     delete process.env.OPENROUTER_API_KEY;
+    // NOTE: import AIError dynamically AFTER resetModules so instanceof
+    // compares against the same module instance used by fallback.ts.
     const { completeWithFallback } = await import("@/lib/ai/fallback");
-    await expect(completeWithFallback({ system: "s", user: "u" })).rejects.toThrow(AIError);
+    const { AIError: FreshAIError } = await import("@/lib/ai/providers/gemini");
+    await expect(completeWithFallback({ system: "s", user: "u" })).rejects.toThrow(FreshAIError);
   });
 });

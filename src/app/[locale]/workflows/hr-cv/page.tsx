@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { usePendingRouter } from "@/components/layout/navigation-pending";
 import { FeatureCard } from "@/components/board/feature-card";
 import { stepStatus, useAppStore } from "@/store/app-store";
+import { RagPanel } from "@/components/hr/rag-panel";
 
 export default function HrBoardPage() {
   const t = useTranslations("board");
@@ -37,6 +38,7 @@ export default function HrBoardPage() {
           />
         ))}
       </div>
+      <RagPanel />
     </AppShell>
   );
 }
