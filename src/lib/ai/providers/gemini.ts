@@ -14,6 +14,8 @@ export type ProviderRequest = {
    * Default "gemini".
    */
   prefer?: "groq" | "gemini";
+  /** Bulk ≥10 fixes: use Groq gpt-oss-120b (65K output, 131K context) */
+  bulk?: boolean;
 };
 
 export type ProviderResult = {

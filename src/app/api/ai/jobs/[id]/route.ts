@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getJobView, jobsConfigured } from "@/lib/ai/jobs";
+import { getJobView, jobsConfigured, pumpQueue } from "@/lib/ai/jobs";
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   if (!jobsConfigured()) {
@@ -12,5 +12,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   }
   const view = await getJobView(id, token);
   if (!view) return NextResponse.json({ error: "Job not found", code: "not_found" }, { status: 404 });
+  // Wake worker on Vercel serverless (process may have frozen between requests)
+  pumpQueue();
   return NextResponse.json(view);
 }

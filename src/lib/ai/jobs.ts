@@ -245,14 +245,41 @@ async function runJob(
   }>;
   const locale = (payload.locale as string) === "vi" ? "vi" : "en";
   const reasonLang = locale === "vi" ? "Vietnamese" : "English";
-  const result = await gateway({
-    system: `You fix spreadsheet data quality issues. REPAIR-FIRST: Always try "set" (provide corrected newValue) first; use "delete_row" ONLY when the value is truly unsalvageable (e.g. "not-an-email" with no @ at all, empty required cell, exact duplicate). Use "keep" for false positives. Copy rowIndex and column EXACTLY. Normalize: email uppercase/with spaces -> lowercase trimmed; phone like "84123..." or "+84 901 234 567" -> "0901234567" (Vietnamese 0 + 9 digits); date "01/02/2024" -> "2024-02-01"; name with extra spaces -> collapsed single spaces. Write "reason" in ${reasonLang}, short (max 12 words). For empty values, use "${locale === "vi" ? "Hàng trống, không có dữ liệu" : "Empty, no data"}" as reason. IMPORTANT: return a JSON OBJECT shaped {"fixes": [...]}, never a bare array. Return only JSON.`,
-    user: `Column: ${payload.column}\nRule: ${payload.ruleLabel}\nIssues: ${JSON.stringify(issues).slice(0, 6000)}`,
-    schema: { name: "sheets_fix", value: FIX_SCHEMA as unknown as Record<string, unknown> },
-    temperature: 0.1,
-    maxTokens: 2000,
-    prefer: "groq",
-  });
+  const bulk = issues.length >= 10;
+  const doCall = async (retryHint?: string) => {
+    const sys = `You fix spreadsheet data quality issues. REPAIR-FIRST: Always try "set" (provide corrected newValue) first; use "delete_row" ONLY when the value is truly unsalvageable (e.g. "not-an-email" with no @ at all, empty required cell, exact duplicate). Use "keep" for false positives. Copy rowIndex and column EXACTLY. Normalize: email uppercase/with spaces -> lowercase trimmed; phone like "84123..." or "+84 901 234 567" -> "0901234567" (Vietnamese 0 + 9 digits); date "01/02/2024" -> "2024-02-01"; name with extra spaces -> collapsed single spaces. Write "reason" in ${reasonLang}, short (max 12 words). For empty values, use "${locale === "vi" ? "Hàng trống, không có dữ liệu" : "Empty, no data"}" as reason. IMPORTANT: return a JSON OBJECT shaped {"fixes": [...]}, never a bare array. Return only JSON.${retryHint ? ` ${retryHint}` : ""}`;
+    return gateway({
+      system: sys,
+      user: `Column: ${payload.column}\nRule: ${payload.ruleLabel}\nIssues: ${JSON.stringify(issues).slice(0, bulk ? 12000 : 6000)}`,
+      schema: { name: "sheets_fix", value: FIX_SCHEMA as unknown as Record<string, unknown> },
+      temperature: 0.1,
+      maxTokens: bulk ? 4000 : 2000,
+      prefer: "groq",
+      bulk,
+    });
+  };
+  const result = await doCall();
   const fixes = normalizeFixes(result.content, issues.map((i) => i.rowIndex));
+  // Retry once if AI returned no usable fixes (empty) — often Groq json_object hallucination
+  if (!fixes.length) {
+    // Retry with explicit hint to force fixes
+    try {
+      const retry = await doCall(
+        `You MUST return at least one fix for every issue. If value is empty, use delete_row with reason "${locale === "vi" ? "Hàng trống, không có dữ liệu" : "Empty, no data"}". Do not return empty fixes.`
+      );
+      const retryFixes = normalizeFixes(retry.content, issues.map((i) => i.rowIndex));
+      if (retryFixes.length) {
+        return { fixes: retryFixes, provider: retry.provider, provider_chain: retry.provider_chain };
+      }
+    } catch {
+      // ignore retry error, fall through to throw queue-full style error below
+    }
+    // If still empty, surface as queue-busy style error so UI shows actionable message instead of silent 0
+    throw new Error(
+      locale === "vi"
+        ? "AI chưa tạo được gợi ý (hàng chờ đông, thử lại sau 5s). Đã áp dụng sửa nhanh cục bộ."
+        : "AI queue is busy — no suggestion yet. Quick local fixes applied, please retry in 5s."
+    );
+  }
   return { fixes, provider: result.provider, provider_chain: result.provider_chain };
 }

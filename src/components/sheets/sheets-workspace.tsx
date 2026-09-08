@@ -278,9 +278,9 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
       }));
       return;
     }
-    // 3) Enqueue AI for the remainder (10s timeout — never hang the UI).
+    // 3) Enqueue AI for the remainder (20s timeout to match provider 20s — never hang the UI).
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const timer = setTimeout(() => ctrl.abort(), 20000);
     try {
       const res = await fetch("/api/ai/sheets/fix", {
         method: "POST",

@@ -7,6 +7,7 @@ import {
   useNavigationPending,
 } from "@/components/layout/navigation-pending";
 import { SiteHeader } from "@/components/layout/site-header";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -17,16 +18,18 @@ export function AppShell({ children, contentWidth = "uniform" }: AppShellProps) 
   const { isPending } = useNavigationPending();
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      <SiteHeader variant="app" />
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <AppSidebar />
-        <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
-          <ContentPane width={contentWidth} className="flex min-h-0 flex-1 flex-col">
-            {isPending ? <ContentRouteLoading /> : children}
-          </ContentPane>
-        </main>
+    <TooltipProvider delayDuration={150}>
+      <div className="flex h-dvh flex-col overflow-hidden">
+        <SiteHeader variant="app" />
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <AppSidebar />
+          <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
+            <ContentPane width={contentWidth} className="flex min-h-0 flex-1 flex-col">
+              {isPending ? <ContentRouteLoading /> : children}
+            </ContentPane>
+          </main>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

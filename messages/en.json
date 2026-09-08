@@ -101,7 +101,7 @@
     "aiFixAiWorking": "AI is fixing…",
     "aiFixAiPending": "Quick fixes shown — AI is handling the rest…",
     "aiFixLocal": "quick",
-    "aiFixTimeout": "Queue submit timed out (>10s). Check connection and retry.",
+    "aiFixTimeout": "Queue submit timed out (>20s). Check connection and retry.",
     "aiFixError": "AI Fix failed",
     "aiFixPreview": "Preview ({n} fixes)",
     "aiFixApply": "Apply fixes",
