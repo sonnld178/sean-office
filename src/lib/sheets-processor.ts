@@ -620,6 +620,55 @@ export function filterRows(
   });
 }
 
+export type ColumnFilter = {
+  column: string;
+  op: FilterOp;
+  value?: string;
+  selectedValues?: string[]; // for checklist OR within column
+};
+
+export function filterRowsMulti(
+  rows: SheetRow[],
+  filters: ColumnFilter[]
+): SheetRow[] {
+  if (!filters.length) return rows;
+  return rows.filter((row) =>
+    filters.every((f) => {
+      const raw = row[f.column];
+      const str = raw == null ? "" : String(raw).trim();
+      // Checklist mode: OR within column
+      if (f.selectedValues && f.selectedValues.length) {
+        return f.selectedValues.includes(str);
+      }
+      const v = (f.value ?? "").trim().toLowerCase();
+      switch (f.op) {
+        case "contains":
+          return str.toLowerCase().includes(v);
+        case "equals":
+          return str.toLowerCase() === v;
+        case "notEmpty":
+          return str !== "";
+        case "isEmpty":
+          return str === "";
+        default:
+          return true;
+      }
+    })
+  );
+}
+
+export function uniqueColumnValues(rows: SheetRow[], column: string, limit = 100): string[] {
+  const set = new Set<string>();
+  for (const r of rows) {
+    const v = r[column] == null ? "" : String(r[column]).trim();
+    if (v !== "" && !set.has(v)) {
+      set.add(v);
+      if (set.size >= limit) break;
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
 export interface CleanOptions {
   removeEmptyRows?: boolean;
   trimCells?: boolean;

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToolbarIconButton } from "@/components/tool/toolbar-icon-button";
 import { PreviewZoomControls } from "@/components/tool/preview-zoom-controls";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -35,8 +36,10 @@ import {
   deterministicFixes,
   exportCsv,
   exportXlsx,
-  filterRows,
+  filterRowsMulti,
   runReviewChecks,
+  uniqueColumnValues,
+  type ColumnFilter,
   type FilterOp,
   type ReviewIssue,
   type ReviewRule,
@@ -102,10 +105,12 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
   } | null>(null);
   const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
 
-  const [filterColumn, setFilterColumn] = useState("");
-  const [filterOp, setFilterOp] = useState<FilterOp>("contains");
-  const [filterValue, setFilterValue] = useState("");
-  const [filterActive, setFilterActive] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilter>>({});
+  const [openFilterColumn, setOpenFilterColumn] = useState<string | null>(null);
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterOpTemp, setFilterOpTemp] = useState<FilterOp>("contains");
+  const [filterValueTemp, setFilterValueTemp] = useState("");
+  const [selectedValuesTemp, setSelectedValuesTemp] = useState<string[]>([]);
 
   const [cleanRemoveEmptyRows, setCleanRemoveEmptyRows] = useState(true);
   const [cleanTrimCells, setCleanTrimCells] = useState(true);
@@ -170,9 +175,13 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
   const baseData = processed.length ? processed : mapped;
 
   const filteredData = useMemo(() => {
-    if (!filterActive || !filterColumn) return baseData;
-    return filterRows(baseData, filterColumn, filterOp, filterValue);
-  }, [baseData, filterActive, filterColumn, filterOp, filterValue]);
+    const filters = Object.values(columnFilters);
+    if (!filters.length) return baseData;
+    return filterRowsMulti(baseData, filters);
+  }, [baseData, columnFilters]);
+
+  const filterActive = Object.keys(columnFilters).length > 0;
+  const activeFilterCount = Object.keys(columnFilters).length;
 
   const displayRows = filteredData.slice(0, 50);
   const displayHeaders =
@@ -413,13 +422,50 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     if (reviewRules) setReviewIssues(runReviewChecks(undoSnapshot.rows, reviewRules));
   };
 
-  const applyFilter = () => {
-    if (!filterColumn) return;
-    setFilterActive(true);
+  const applyFilterForColumn = (col: string) => {
+    const hasSelected = selectedValuesTemp.length > 0;
+    const hasCondition = filterOpTemp === "notEmpty" || filterOpTemp === "isEmpty" || filterValueTemp.trim() !== "";
+    if (!hasSelected && !hasCondition) return;
+    const next: ColumnFilter = hasSelected
+      ? { column: col, op: "equals", selectedValues: [...selectedValuesTemp] }
+      : { column: col, op: filterOpTemp, value: filterValueTemp };
+    setColumnFilters((prev) => ({ ...prev, [col]: next }));
+    setOpenFilterColumn(null);
   };
 
-  const clearFilter = () => {
-    setFilterActive(false);
+  const clearFilterForColumn = (col: string) => {
+    setColumnFilters((prev) => {
+      const next = { ...prev };
+      delete next[col];
+      return next;
+    });
+    setOpenFilterColumn(null);
+  };
+
+  const clearAllFilters = () => {
+    setColumnFilters({});
+    setOpenFilterColumn(null);
+  };
+
+  const openFilterForColumn = (col: string) => {
+    const existing = columnFilters[col];
+    if (existing) {
+      if (existing.selectedValues) {
+        setSelectedValuesTemp([...existing.selectedValues]);
+        setFilterOpTemp("contains");
+        setFilterValueTemp("");
+      } else {
+        setSelectedValuesTemp([]);
+        setFilterOpTemp(existing.op);
+        setFilterValueTemp(existing.value ?? "");
+      }
+    } else {
+      setSelectedValuesTemp([]);
+      setFilterOpTemp("contains");
+      setFilterValueTemp("");
+    }
+    setFilterSearch("");
+    setOpenFilterColumn(col);
   };
 
   const runClean = () => {
@@ -430,7 +476,8 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     });
     setSheetsData(headers, rows);
     setProcessed([]);
-    setFilterActive(false);
+    setColumnFilters({});
+    setOpenFilterColumn(null);
     setReviewIssues([]);
   };
 
@@ -438,13 +485,20 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
 
   const toolbar = (
     <>
-      <ToolbarIconButton
-        icon={<Filter />}
-        label={t("filter.title")}
-        tip={t("tipFilter")}
-        active={activeTool === "filter"}
-        onClick={() => toggleTool("filter")}
-      />
+      <div className="relative">
+        <ToolbarIconButton
+          icon={<Filter />}
+          label={filterActive ? `${t("filter.title")} (${activeFilterCount})` : t("filter.title")}
+          tip={t("tipFilter")}
+          active={activeTool === "filter" || filterActive}
+          onClick={() => toggleTool("filter")}
+        />
+        {activeFilterCount > 0 && activeTool !== "filter" && (
+          <span className="pointer-events-none absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+            {activeFilterCount}
+          </span>
+        )}
+      </div>
       <ToolbarIconButton
         icon={<BrushCleaning />}
         label={t("clean.title")}
@@ -477,61 +531,38 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
           onClose={() => setActiveTool(null)}
         />
         <p className="mb-3 text-xs text-muted-foreground">{t("filter.howTo")}</p>
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <span className="text-xs font-medium">{t("filterColumn")}</span>
-            <Select value={filterColumn} onValueChange={setFilterColumn}>
-              <SelectTrigger className="text-xs">
-                <SelectValue placeholder="" />
-              </SelectTrigger>
-              <SelectContent>
-                {filterColumns.map((col) => (
-                  <SelectItem key={col} value={col}>
-                    {col}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <span className="text-xs font-medium">{t("filterCondition")}</span>
-            <Select
-              value={filterOp}
-              onValueChange={(v) => setFilterOp(v as FilterOp)}
-            >
-              <SelectTrigger className="text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="contains">{t("filterContains")}</SelectItem>
-                <SelectItem value="equals">{t("filterEquals")}</SelectItem>
-                <SelectItem value="notEmpty">{t("filterNotEmpty")}</SelectItem>
-                <SelectItem value="isEmpty">{t("filterIsEmpty")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {filterOp === "contains" || filterOp === "equals" ? (
-            <div className="space-y-2">
-              <span className="text-xs font-medium">{t("filterValue")}</span>
-              <Input
-                value={filterValue}
-                onChange={(e) => setFilterValue(e.target.value)}
-                className="text-xs"
-              />
-            </div>
-          ) : null}
-          <SparkHoverButton size="sm" onClick={applyFilter}>
-            {t("applyFilter")}
-          </SparkHoverButton>
-          {filterActive ? (
-            <>
-              <p className="text-xs text-primary">{t("filterActive")}</p>
-              <Button size="sm" variant="outline" onClick={clearFilter}>
-                {t("clearFilter")}
+        {filterActive ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium">
+                {activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"} · AND
+              </span>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={clearAllFilters}>
+                {t("clearFilter")} all
               </Button>
-            </>
-          ) : null}
-        </div>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(columnFilters).map(([col, f]) => (
+                <div key={col} className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2 py-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium">{col}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {f.selectedValues ? `${f.selectedValues.length} selected` : f.op === "notEmpty" ? t("filterNotEmpty") : f.op === "isEmpty" ? t("filterIsEmpty") : `${f.op === "contains" ? t("filterContains") : t("filterEquals")} "${f.value}"`}
+                    </p>
+                  </div>
+                  <Button size="icon" variant="ghost" className="size-6 shrink-0" onClick={() => clearFilterForColumn(col)}>
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">Matches all filters (AND). Use column header funnel to add more.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">No active filters. Click the funnel icon in any column header to filter.</p>
+          </div>
+        )}
       </>
     ) : activeTool === "clean" ? (
       <>
@@ -905,6 +936,36 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
               onReset={resetZoom}
             />
           </div>
+          {filterActive && (
+            <div className="sticky top-[48px] z-10 mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border bg-card/90 px-2 py-1.5 text-xs backdrop-blur">
+              <span className="font-medium">Filters:</span>
+              {Object.entries(columnFilters).map(([col, f]) => (
+                <span key={col} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5">
+                  <span className="max-w-[120px] truncate font-medium">{col}:</span>
+                  <span className="max-w-[140px] truncate text-muted-foreground">
+                    {f.selectedValues
+                      ? `${f.selectedValues.length} selected`
+                      : f.op === "notEmpty"
+                        ? t("filterNotEmpty")
+                        : f.op === "isEmpty"
+                          ? t("filterIsEmpty")
+                          : `${f.op === "contains" ? t("filterContains") : t("filterEquals")} "${f.value}"`}
+                  </span>
+                  <button
+                    onClick={() => clearFilterForColumn(col)}
+                    className="ml-1 rounded-full p-0.5 hover:bg-primary/20"
+                    aria-label={`Clear ${col} filter`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+              <Button size="sm" variant="ghost" className="ml-1 h-6 text-xs" onClick={clearAllFilters}>
+                Clear all
+              </Button>
+              <span className="ml-auto shrink-0 text-muted-foreground">AND · {rowCount} of {totalRows}</span>
+            </div>
+          )}
           <div
             className="origin-top overflow-x-auto rounded-lg border bg-background"
             style={{
@@ -917,11 +978,113 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="sticky left-0 w-12 bg-background text-xs">#</TableHead>
-                  {displayHeaders.map((h) => (
-                    <TableHead key={h} className="text-xs">
-                      {h}
-                    </TableHead>
-                  ))}
+                  {displayHeaders.map((h) => {
+                    const isActive = !!columnFilters[h];
+                    const isOpen = openFilterColumn === h;
+                    const uniqueVals = uniqueColumnValues(baseData, h, 100);
+                    const filteredVals = filterSearch
+                      ? uniqueVals.filter((v) => v.toLowerCase().includes(filterSearch.toLowerCase()))
+                      : uniqueVals;
+                    const allSelected =
+                      filteredVals.length > 0 && filteredVals.every((v) => selectedValuesTemp.includes(v));
+                    return (
+                      <TableHead key={h} className="whitespace-nowrap text-xs group">
+                        <Popover open={isOpen} onOpenChange={(open) => setOpenFilterColumn(open ? h : null)}>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="truncate" title={h}>
+                              {h}
+                            </span>
+                            <PopoverTrigger asChild>
+                              <button
+                                onClick={() => {
+                                  if (!isOpen) openFilterForColumn(h);
+                                }}
+                                className={`flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted ${isActive ? "bg-primary/10 text-primary opacity-100" : "opacity-0 group-hover:opacity-60"} ${isOpen ? "!opacity-100 bg-muted" : ""}`}
+                                aria-label={`Filter ${h}`}
+                              >
+                                <Filter className="size-3" />
+                              </button>
+                            </PopoverTrigger>
+                          </div>
+                          <PopoverContent align="start" side="bottom" sideOffset={4} collisionPadding={8} className="w-64 p-2">
+                            <div className="space-y-2">
+                              <Input
+                                placeholder="Search values"
+                                value={filterSearch}
+                                onChange={(e) => setFilterSearch(e.target.value)}
+                                className="h-7 text-xs"
+                              />
+                              <label className="flex items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
+                                <Checkbox
+                                  checked={allSelected}
+                                  onCheckedChange={(v) => {
+                                    if (v) setSelectedValuesTemp([...filteredVals]);
+                                    else setSelectedValuesTemp([]);
+                                  }}
+                                />
+                                <span className="font-medium">Select All</span>
+                                <span className="ml-auto text-[11px] text-muted-foreground">{filteredVals.length}</span>
+                              </label>
+                              <div className="max-h-36 space-y-0.5 overflow-auto rounded border bg-background p-1">
+                                {filteredVals.length ? (
+                                  filteredVals.map((val) => (
+                                    <label key={val} className="flex items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
+                                      <Checkbox
+                                        checked={selectedValuesTemp.includes(val)}
+                                        onCheckedChange={(v) => {
+                                          setSelectedValuesTemp((prev) =>
+                                            v ? [...prev, val] : prev.filter((x) => x !== val)
+                                          );
+                                        }}
+                                      />
+                                      <span className="truncate" title={val}>
+                                        {val || "(empty)"}
+                                      </span>
+                                    </label>
+                                  ))
+                                ) : (
+                                  <p className="px-1 py-2 text-center text-xs text-muted-foreground">No values</p>
+                                )}
+                              </div>
+                              <div className="border-t pt-2">
+                                <p className="mb-1 text-[11px] font-medium text-muted-foreground">Filter by condition</p>
+                                <div className="flex gap-1">
+                                  <Select value={filterOpTemp} onValueChange={(v) => setFilterOpTemp(v as FilterOp)}>
+                                    <SelectTrigger className="h-7 flex-1 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="contains">{t("filterContains")}</SelectItem>
+                                      <SelectItem value="equals">{t("filterEquals")}</SelectItem>
+                                      <SelectItem value="notEmpty">{t("filterNotEmpty")}</SelectItem>
+                                      <SelectItem value="isEmpty">{t("filterIsEmpty")}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                {(filterOpTemp === "contains" || filterOpTemp === "equals") && (
+                                  <Input
+                                    placeholder={t("filterValue")}
+                                    value={filterValueTemp}
+                                    onChange={(e) => setFilterValueTemp(e.target.value)}
+                                    className="mt-1 h-7 text-xs"
+                                  />
+                                )}
+                              </div>
+                              <div className="flex gap-1 pt-1">
+                                <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => clearFilterForColumn(h)}>
+                                  Clear
+                                </Button>
+                                <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => applyFilterForColumn(h)}>
+                                  Apply
+                                </Button>
+                              </div>
+                              <p className="text-center text-[10px] text-muted-foreground">OR within column · AND across columns</p>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </TableHead>
+                    );
+                  })}
                 </TableRow>
               </TableHeader>
               <TableBody>
