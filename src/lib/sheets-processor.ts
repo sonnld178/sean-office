@@ -55,8 +55,8 @@ function applyTransform(
     case "phone":
       return s.replace(/[^\d+]/g, "");
     case "date": {
-      const d = new Date(s);
-      return isNaN(d.getTime()) ? s : d.toISOString().slice(0, 10);
+      const iso = toIsoDate(s);
+      return iso ?? s;
     }
     default:
       return s;
@@ -201,10 +201,44 @@ export function looksLikePhone(v: string): boolean {
   return validatePhoneDetail(v).valid;
 }
 
-function looksLikeDate(v: string): boolean {
-  const s = v.trim();
-  if (!s || /^\d+$/.test(s)) return false; // bare numbers are not dates
-  return !isNaN(new Date(s).getTime());
+/** Strict date whitelist: YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD, DD/MM/YYYY, DD-MM-YYYY, with 1-2 digit M/D, year 1900-2100 */
+const DATE_STRICT_PATTERNS: Array<{ re: RegExp; y: number; m: number; d: number }> = [
+  { re: /^\d{4}-\d{1,2}-\d{1,2}$/, y: 0, m: 1, d: 2 }, // YYYY-MM-DD
+  { re: /^\d{4}\/\d{1,2}\/\d{1,2}$/, y: 0, m: 1, d: 2 }, // YYYY/MM/DD
+  { re: /^\d{4}\.\d{1,2}\.\d{1,2}$/, y: 0, m: 1, d: 2 }, // YYYY.MM.DD
+  { re: /^\d{1,2}\/\d{1,2}\/\d{4}$/, y: 2, m: 1, d: 0 }, // DD/MM/YYYY
+  { re: /^\d{1,2}-\d{1,2}-\d{4}$/, y: 2, m: 1, d: 0 }, // DD-MM-YYYY
+];
+
+function parseStrictDateParts(s: string): { y: number; m: number; d: number } | null {
+  const t = s.trim();
+  for (const p of DATE_STRICT_PATTERNS) {
+    if (!p.re.test(t)) continue;
+    const sep = p.re.source.includes("\\/") ? "/" : p.re.source.includes("\\.") ? "." : "-";
+    const parts = t.split(sep);
+    if (parts.length !== 3) continue;
+    const y = Number(parts[p.y]);
+    const m = Number(parts[p.m]);
+    const d = Number(parts[p.d]);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) continue;
+    return { y, m, d };
+  }
+  return null;
+}
+
+export function isDatePattern(v: string): boolean {
+  return parseStrictDateParts(v) !== null;
+}
+
+export function isValidDateStrict(v: string): boolean {
+  const parsed = parseStrictDateParts(v);
+  if (!parsed) return false;
+  const { y, m, d } = parsed;
+  if (y < 1900 || y > 2100) return false;
+  if (m < 1 || m > 12) return false;
+  if (d < 1 || d > 31) return false;
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
 }
 
 export function isValidEmail(v: string): boolean {
@@ -216,7 +250,15 @@ export function isValidPhone(v: string): boolean {
 }
 
 export function isValidDateValue(v: string): boolean {
-  return looksLikeDate(v);
+  return isValidDateStrict(v);
+}
+
+export function toIsoDate(v: string): string | null {
+  const parsed = parseStrictDateParts(v);
+  if (!parsed) return null;
+  const { y, m, d } = parsed;
+  if (!isValidDateStrict(v)) return null;
+  return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 export function isEmptyValue(v: string | number | null | undefined): boolean {
@@ -248,8 +290,12 @@ export function detectReviewRules(
       const s = String(raw);
       total++;
       if (looksLikeEmail(s)) email++;
-      else if (looksLikePhone(s)) phone++;
-      if (looksLikeDate(s)) date++;
+      else if (isDatePattern(s)) {
+        // Any whitelisted date format counts as date (valid or not), so it never leaks to phone
+        date++;
+      } else if (looksLikePhone(s)) phone++;
+      // Valid dates also counted above; keep looksLikeDate for completeness but pattern already covers
+      // (fallback for any other valid date not in whitelist is not needed)
     }
     const fillRate =
       sample.length > 0
@@ -275,24 +321,6 @@ export function detectReviewRules(
     const norm = normalizeHeader(column);
     const secret = isSecretHeader(norm);
     const stats = profile(column);
-
-    const push = (
-      type: ReviewRuleType,
-      confidence: ReviewConfidence,
-      source: "header" | "content",
-      label: string,
-      enabled: boolean
-    ) => {
-      rules.push({
-        id: `${type}:${column}`,
-        type,
-        column,
-        label,
-        confidence,
-        source,
-        enabled,
-      });
-    };
 
     // 1) Header decides the type (high confidence). Secret headers opt out.
     const emailByHeader = headerMatches(norm, HEADER_KEYWORDS.email);
@@ -368,7 +396,6 @@ export function runReviewChecks(
   rules: ReviewRule[]
 ): ReviewIssue[] {
   const issues: ReviewIssue[] = [];
-  const seenByRule = new Map<string, Set<string>>();
 
   // duplicate needs per-column seen sets for type-wide rules
   const seenByRuleCol = new Map<string, Set<string>>();
@@ -496,7 +523,8 @@ const MAX_FIXES = 200;
 export function deterministicFixes(
   rows: SheetRow[],
   issues: ReviewIssue[],
-  rules: ReviewRule[]
+  rules: ReviewRule[],
+  locale: string = "en"
 ): DeterministicFix[] {
   const enabledById = new Map(
     rules.filter((r) => r.enabled).map((r) => [r.id, r] as const)
@@ -512,6 +540,7 @@ export function deterministicFixes(
     if (raw == null) continue;
     const original = String(raw);
 
+    const isVi = locale === "vi";
     if (rule.type === "email") {
       const normalized = original.trim().toLowerCase();
       if (normalized !== original && isValidEmail(normalized)) {
@@ -520,10 +549,12 @@ export function deterministicFixes(
           column: issue.column,
           action: "set",
           newValue: normalized,
-          reason: "Chuẩn hóa email (thường + trim)",
+          reason: isVi ? "Chuẩn hóa email (thường + trim)" : "Normalize email (lowercase + trim)",
         });
       }
     } else if (rule.type === "phone") {
+      // Do not try to normalize dates as phones (e.g. 2024/02/29 -> 20240229)
+      if (isDatePattern(original)) continue;
       let d = original.replace(/\D/g, "");
       if (/^84\d{9}$/.test(d)) d = "0" + d.slice(-9);
       if (d !== original && isValidPhone(d)) {
@@ -532,23 +563,21 @@ export function deterministicFixes(
           column: issue.column,
           action: "set",
           newValue: d,
-          reason: "Chuẩn hóa SĐT",
+          reason: isVi ? "Chuẩn hóa SĐT" : "Normalize phone",
         });
       }
     } else if (rule.type === "date") {
+      // Only fix valid dates that need normalization to ISO; invalid dates (e.g. 31/02/1990) have no deterministic fix — AI will suggest
       if (!isValidDateValue(original)) continue;
-      const parsed = new Date(original);
-      if (isNaN(parsed.getTime())) continue;
-      const iso = parsed.toISOString().slice(0, 10);
-      if (iso !== original) {
-        fixes.push({
-          rowIndex: issue.rowIndex,
-          column: issue.column,
-          action: "set",
-          newValue: iso,
-          reason: "Chuẩn hóa ngày YYYY-MM-DD",
-        });
-      }
+      const iso = toIsoDate(original);
+      if (!iso || iso === original) continue;
+      fixes.push({
+        rowIndex: issue.rowIndex,
+        column: issue.column,
+        action: "set",
+        newValue: iso,
+        reason: isVi ? "Chuẩn hóa ngày YYYY-MM-DD" : "Normalize date to YYYY-MM-DD",
+      });
     }
   }
   return fixes;
@@ -589,6 +618,55 @@ export function filterRows(
         return true;
     }
   });
+}
+
+export type ColumnFilter = {
+  column: string;
+  op: FilterOp;
+  value?: string;
+  selectedValues?: string[]; // for checklist OR within column
+};
+
+export function filterRowsMulti(
+  rows: SheetRow[],
+  filters: ColumnFilter[]
+): SheetRow[] {
+  if (!filters.length) return rows;
+  return rows.filter((row) =>
+    filters.every((f) => {
+      const raw = row[f.column];
+      const str = raw == null ? "" : String(raw).trim();
+      // Checklist mode: OR within column
+      if (f.selectedValues && f.selectedValues.length) {
+        return f.selectedValues.includes(str);
+      }
+      const v = (f.value ?? "").trim().toLowerCase();
+      switch (f.op) {
+        case "contains":
+          return str.toLowerCase().includes(v);
+        case "equals":
+          return str.toLowerCase() === v;
+        case "notEmpty":
+          return str !== "";
+        case "isEmpty":
+          return str === "";
+        default:
+          return true;
+      }
+    })
+  );
+}
+
+export function uniqueColumnValues(rows: SheetRow[], column: string, limit = 100): string[] {
+  const set = new Set<string>();
+  for (const r of rows) {
+    const v = r[column] == null ? "" : String(r[column]).trim();
+    if (v !== "" && !set.has(v)) {
+      set.add(v);
+      if (set.size >= limit) break;
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
 
 export interface CleanOptions {

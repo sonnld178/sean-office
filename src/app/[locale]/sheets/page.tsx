@@ -15,7 +15,7 @@ export default function SheetsPage() {
   const [loaded, setLoaded] = useState(false);
   const [limitWarning, setLimitWarning] = useState<string | null>(null);
   const [limitInfo, setLimitInfo] = useState<string | null>(null);
-  const { setSheetsData, setSheetsMappings } = useAppStore();
+  const { setSheetsData } = useAppStore();
 
   const handleNewFile = useCallback(() => {
     setLoaded(false);
@@ -23,8 +23,7 @@ export default function SheetsPage() {
     setLimitWarning(null);
     setLimitInfo(null);
     setSheetsData([], []);
-    setSheetsMappings([]);
-  }, [setSheetsData, setSheetsMappings]);
+  }, [setSheetsData]);
 
   return (
     <AppShell contentWidth="wide">
@@ -55,7 +54,8 @@ export default function SheetsPage() {
             const res = await fetch(href);
             if (!res.ok) throw new Error("Failed to load sample");
             const buffer = await res.arrayBuffer();
-            let { headers, rows } = await parseSpreadsheet(buffer);
+            const { headers, rows: initialRows } = await parseSpreadsheet(buffer);
+            let rows = initialRows;
             if (rows.length > 500) {
               const originalN = rows.length;
               rows = rows.slice(0, 500);
@@ -66,19 +66,13 @@ export default function SheetsPage() {
               setLimitInfo(null);
             }
             setSheetsData(headers, rows);
-            setSheetsMappings(
-              headers.map((h) => ({
-                source: h,
-                target: h,
-                transform: "none" as const,
-              }))
-            );
             setFileName(href.split("/").pop() || "sheets-messy.xlsx");
             setLoaded(true);
           }}
           onFiles={async (items, { setProgress }) => {
             setProgress(90);
-            let { headers, rows } = await parseSpreadsheet(items[0].buffer);
+            const { headers, rows: initialRows } = await parseSpreadsheet(items[0].buffer);
+            let rows = initialRows;
             if (rows.length > 500) {
               const originalN = rows.length;
               rows = rows.slice(0, 500);
@@ -89,13 +83,6 @@ export default function SheetsPage() {
               setLimitInfo(null);
             }
             setSheetsData(headers, rows);
-            setSheetsMappings(
-              headers.map((h) => ({
-                source: h,
-                target: h,
-                transform: "none" as const,
-              }))
-            );
             setFileName(items[0].file.name || "spreadsheet.csv");
             setLoaded(true);
             setProgress(100);

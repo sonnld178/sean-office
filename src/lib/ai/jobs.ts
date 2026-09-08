@@ -243,8 +243,10 @@ async function runJob(
     value: unknown;
     message: string;
   }>;
+  const locale = (payload.locale as string) === "vi" ? "vi" : "en";
+  const reasonLang = locale === "vi" ? "Vietnamese" : "English";
   const result = await gateway({
-    system: `You fix spreadsheet data quality issues. REPAIR-FIRST: Always try "set" (provide corrected newValue) first; use "delete_row" ONLY when the value is truly unsalvageable (e.g. "not-an-email" with no @ at all, empty required cell, exact duplicate). Use "keep" for false positives. Copy rowIndex and column EXACTLY. Normalize: email uppercase/with spaces -> lowercase trimmed; phone like "84123..." or "+84 901 234 567" -> "0901234567" (Vietnamese 0 + 9 digits); date "01/02/2024" -> "2024-02-01"; name with extra spaces -> collapsed single spaces. Write "reason" in Vietnamese, short (max 12 words). IMPORTANT: return a JSON OBJECT shaped {"fixes": [...]}, never a bare array. Return only JSON.`,
+    system: `You fix spreadsheet data quality issues. REPAIR-FIRST: Always try "set" (provide corrected newValue) first; use "delete_row" ONLY when the value is truly unsalvageable (e.g. "not-an-email" with no @ at all, empty required cell, exact duplicate). Use "keep" for false positives. Copy rowIndex and column EXACTLY. Normalize: email uppercase/with spaces -> lowercase trimmed; phone like "84123..." or "+84 901 234 567" -> "0901234567" (Vietnamese 0 + 9 digits); date "01/02/2024" -> "2024-02-01"; name with extra spaces -> collapsed single spaces. Write "reason" in ${reasonLang}, short (max 12 words). For empty values, use "${locale === "vi" ? "Hàng trống, không có dữ liệu" : "Empty, no data"}" as reason. IMPORTANT: return a JSON OBJECT shaped {"fixes": [...]}, never a bare array. Return only JSON.`,
     user: `Column: ${payload.column}\nRule: ${payload.ruleLabel}\nIssues: ${JSON.stringify(issues).slice(0, 6000)}`,
     schema: { name: "sheets_fix", value: FIX_SCHEMA as unknown as Record<string, unknown> },
     temperature: 0.1,

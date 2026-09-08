@@ -25,6 +25,7 @@ export async function POST(req: Request) {
       column?: string;
       ruleId?: string;
       ruleLabel?: string;
+      locale?: string;
       issues?: Array<{ rowIndex: number; column: string; value?: unknown; message?: string }>;
     } | null;
 
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
       column: body.column,
       ruleId: body.ruleId ?? "",
       ruleLabel: body.ruleLabel ?? "",
+      locale: body.locale === "vi" ? "vi" : "en",
       issues,
     });
     pumpQueue();

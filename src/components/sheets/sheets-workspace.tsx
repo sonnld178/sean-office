@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { SheetRow } from "@/store/app-store";
 import { SparkHoverButton } from "@/components/SparkHoverButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToolbarIconButton } from "@/components/tool/toolbar-icon-button";
 import { PreviewZoomControls } from "@/components/tool/preview-zoom-controls";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -29,17 +30,16 @@ import {
   ToolWorkspaceShell,
 } from "@/components/tool/tool-workspace-shell";
 import {
-  applyMappings,
   cleanRows,
   countIssuesByRule,
   detectReviewRules,
   deterministicFixes,
   exportCsv,
-  exportMappingJson,
   exportXlsx,
-  filterRows,
-  parseMappingJson,
+  filterRowsMulti,
   runReviewChecks,
+  uniqueColumnValues,
+  type ColumnFilter,
   type FilterOp,
   type ReviewIssue,
   type ReviewRule,
@@ -47,17 +47,9 @@ import {
 import { downloadSeanOfficeBlob } from "@/lib/download-names";
 import { usePreviewZoom } from "@/hooks/use-preview-zoom";
 import { useAppStore } from "@/store/app-store";
-import { BrushCleaning, ChevronDown, ChevronRight, Download, Filter, GitCompare, ListChecks, Sparkles, X } from "lucide-react";
+import { BrushCleaning, ChevronDown, ChevronRight, Download, Filter, ListChecks, Sparkles, X } from "lucide-react";
 
-type SheetsTool = "map" | "review" | "export" | "filter" | "clean" | null;
-
-type AiMappingSuggestion = {
-  source: string;
-  target: string;
-  transform: "none" | "trim" | "email" | "phone" | "date";
-  confidence?: number;
-  reason?: string;
-};
+type SheetsTool = "review" | "export" | "filter" | "clean" | null;
 
 interface SheetsWorkspaceProps {
   fileName: string;
@@ -66,9 +58,9 @@ interface SheetsWorkspaceProps {
 
 export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
   const t = useTranslations("sheets");
-  const mappingInputRef = useRef<HTMLInputElement>(null);
+  const locale = useLocale();
   const [activeTool, setActiveTool] = useState<SheetsTool>(null);
-  const [processed, setProcessed] = useState<ReturnType<typeof applyMappings>>(
+  const [processed, setProcessed] = useState<SheetRow[]>(
     []
   );
   const [reviewRules, setReviewRules] = useState<ReviewRule[] | null>(null);
@@ -112,17 +104,13 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     rows: SheetRow[];
   } | null>(null);
   const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
-  const [mappingError, setMappingError] = useState("");
 
-  const [filterColumn, setFilterColumn] = useState("");
-  const [filterOp, setFilterOp] = useState<FilterOp>("contains");
-  const [filterValue, setFilterValue] = useState("");
-  const [filterActive, setFilterActive] = useState(false);
-
-  const [aiSuggestions, setAiSuggestions] = useState<AiMappingSuggestion[] | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [aiProvider, setAiProvider] = useState<string | null>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilter>>({});
+  const [openFilterColumn, setOpenFilterColumn] = useState<string | null>(null);
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterOpTemp, setFilterOpTemp] = useState<FilterOp>("contains");
+  const [filterValueTemp, setFilterValueTemp] = useState("");
+  const [selectedValuesTemp, setSelectedValuesTemp] = useState<string[]>([]);
 
   const [cleanRemoveEmptyRows, setCleanRemoveEmptyRows] = useState(true);
   const [cleanTrimCells, setCleanTrimCells] = useState(true);
@@ -179,22 +167,21 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
   const {
     sheetsHeaders,
     sheetsRows,
-    sheetsMappings,
     setSheetsData,
-    setSheetsMappings,
   } = useAppStore();
 
-  const mapped = useMemo(
-    () => applyMappings(sheetsRows, sheetsMappings),
-    [sheetsRows, sheetsMappings]
-  );
+  const mapped = sheetsRows;
 
   const baseData = processed.length ? processed : mapped;
 
   const filteredData = useMemo(() => {
-    if (!filterActive || !filterColumn) return baseData;
-    return filterRows(baseData, filterColumn, filterOp, filterValue);
-  }, [baseData, filterActive, filterColumn, filterOp, filterValue]);
+    const filters = Object.values(columnFilters);
+    if (!filters.length) return baseData;
+    return filterRowsMulti(baseData, filters);
+  }, [baseData, columnFilters]);
+
+  const filterActive = Object.keys(columnFilters).length > 0;
+  const activeFilterCount = Object.keys(columnFilters).length;
 
   const displayRows = filteredData.slice(0, 50);
   const displayHeaders =
@@ -257,7 +244,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     const issues = reviewIssues.filter((i) => i.ruleId === rule.id).slice(0, 50);
     if (!issues.length || !reviewRules) return;
     // 1) Deterministic local fixes appear instantly — no waiting.
-    const det = deterministicFixes(mapped, issues, reviewRules);
+    const det = deterministicFixes(mapped, issues, reviewRules, locale);
     const detRows = new Set(det.map((d) => d.rowIndex));
     const aiIssues = issues.filter((i) => !detRows.has(i.rowIndex));
     setFixDiff({
@@ -302,6 +289,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
           column: rule.column,
           ruleId: rule.id,
           ruleLabel: rule.label,
+          locale,
           issues: aiIssues.map((i) => ({
             rowIndex: i.rowIndex,
             column: i.column,
@@ -413,11 +401,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
         toDelete.push(f.rowIndex);
         continue;
       }
-      const m =
-        sheetsMappings.find((mm) => mm.target === f.column) ??
-        sheetsMappings.find((mm) => mm.source === f.column);
-      const src = m ? m.source : f.column;
-      if (next[f.rowIndex]) next[f.rowIndex] = { ...next[f.rowIndex], [src]: f.newValue ?? "" };
+      if (next[f.rowIndex]) next[f.rowIndex] = { ...next[f.rowIndex], [f.column]: f.newValue ?? "" };
     }
     toDelete
       .sort((a, b) => b - a)
@@ -427,7 +411,7 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     setSheetsData(sheetsHeaders, next);
     setProcessed([]);
     setFixDiff(null);
-    if (reviewRules) setReviewIssues(runReviewChecks(applyMappings(next, sheetsMappings), reviewRules));
+    if (reviewRules) setReviewIssues(runReviewChecks(next, reviewRules));
   };
 
   const undoFix = () => {
@@ -435,17 +419,53 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     setSheetsData(undoSnapshot.headers, undoSnapshot.rows);
     setUndoSnapshot(null);
     setProcessed([]);
-    if (reviewRules)
-      setReviewIssues(runReviewChecks(applyMappings(undoSnapshot.rows, sheetsMappings), reviewRules));
+    if (reviewRules) setReviewIssues(runReviewChecks(undoSnapshot.rows, reviewRules));
   };
 
-  const applyFilter = () => {
-    if (!filterColumn) return;
-    setFilterActive(true);
+  const applyFilterForColumn = (col: string) => {
+    const hasSelected = selectedValuesTemp.length > 0;
+    const hasCondition = filterOpTemp === "notEmpty" || filterOpTemp === "isEmpty" || filterValueTemp.trim() !== "";
+    if (!hasSelected && !hasCondition) return;
+    const next: ColumnFilter = hasSelected
+      ? { column: col, op: "equals", selectedValues: [...selectedValuesTemp] }
+      : { column: col, op: filterOpTemp, value: filterValueTemp };
+    setColumnFilters((prev) => ({ ...prev, [col]: next }));
+    setOpenFilterColumn(null);
   };
 
-  const clearFilter = () => {
-    setFilterActive(false);
+  const clearFilterForColumn = (col: string) => {
+    setColumnFilters((prev) => {
+      const next = { ...prev };
+      delete next[col];
+      return next;
+    });
+    setOpenFilterColumn(null);
+  };
+
+  const clearAllFilters = () => {
+    setColumnFilters({});
+    setOpenFilterColumn(null);
+  };
+
+  const openFilterForColumn = (col: string) => {
+    const existing = columnFilters[col];
+    if (existing) {
+      if (existing.selectedValues) {
+        setSelectedValuesTemp([...existing.selectedValues]);
+        setFilterOpTemp("contains");
+        setFilterValueTemp("");
+      } else {
+        setSelectedValuesTemp([]);
+        setFilterOpTemp(existing.op);
+        setFilterValueTemp(existing.value ?? "");
+      }
+    } else {
+      setSelectedValuesTemp([]);
+      setFilterOpTemp("contains");
+      setFilterValueTemp("");
+    }
+    setFilterSearch("");
+    setOpenFilterColumn(col);
   };
 
   const runClean = () => {
@@ -456,86 +476,29 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
     });
     setSheetsData(headers, rows);
     setProcessed([]);
-    setFilterActive(false);
+    setColumnFilters({});
+    setOpenFilterColumn(null);
     setReviewIssues([]);
-  };
-
-  const handleImportMapping = async (file: File) => {
-    setMappingError("");
-    try {
-      const text = await file.text();
-      setSheetsMappings(parseMappingJson(text));
-    } catch {
-      setMappingError(t("importMappingError"));
-    }
-  };
-
-  const handleAiMap = async () => {
-    if (!sheetsHeaders.length) return;
-    setAiLoading(true);
-    setAiError(null);
-    setAiProvider(null);
-    try {
-      const sampleRows = sheetsRows.slice(0, 3);
-      const res = await fetch("/api/ai/sheets/map", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ headers: sheetsHeaders, sampleRows }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "AI Map failed");
-      const suggestions: AiMappingSuggestion[] = json.mappings ?? [];
-      setAiSuggestions(suggestions);
-      setAiProvider(json.provider ?? null);
-      if (json.provider_chain) {
-        // keep for toast/log
-      }
-    } catch (e) {
-      setAiError(e instanceof Error ? e.message : "AI Map failed");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const applyAiSuggestions = () => {
-    if (!aiSuggestions?.length) return;
-    const next = aiSuggestions.map((s) => ({
-      source: s.source,
-      target: s.target,
-      transform: s.transform,
-    }));
-    setSheetsMappings(next);
-    setAiSuggestions(null);
   };
 
   const exportData = filteredData;
 
   const toolbar = (
     <>
-      <ToolbarIconButton
-        icon={<GitCompare />}
-        label={t("map.title").replace(/^\d+\s·\s/, "")}
-        tip={t("tipMap")}
-        active={activeTool === "map"}
-        onClick={() => toggleTool("map")}
-      />
-      <ToolbarIconButton
-        icon={<Sparkles />}
-        label="AI Map"
-        tip={t("tipAiMap")}
-        active={aiLoading || aiSuggestions !== null}
-        onClick={() => {
-          setActiveTool("map");
-          void handleAiMap();
-        }}
-      />
-      <ToolbarIconButton
-        icon={<Filter />}
-        label={t("filter.title")}
-        tip={t("tipFilter")}
-        active={activeTool === "filter"}
-        onClick={() => toggleTool("filter")}
-      />
+      <div className="relative">
+        <ToolbarIconButton
+          icon={<Filter />}
+          label={filterActive ? `${t("filter.title")} (${activeFilterCount})` : t("filter.title")}
+          tip={t("tipFilter")}
+          active={activeTool === "filter" || filterActive}
+          onClick={() => toggleTool("filter")}
+        />
+        {activeFilterCount > 0 && activeTool !== "filter" && (
+          <span className="pointer-events-none absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+            {activeFilterCount}
+          </span>
+        )}
+      </div>
       <ToolbarIconButton
         icon={<BrushCleaning />}
         label={t("clean.title")}
@@ -561,179 +524,45 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
   );
 
   const rightPanel =
-    activeTool === "map" ? (
-      <>
-        <ToolPanelHeader
-          title={t("map.title").replace(/^\d+\s·\s/, "")}
-          onClose={() => setActiveTool(null)}
-        />
-        <p className="mb-3 text-xs text-muted-foreground">{t("map.howTo")}</p>
-        <div className="mb-3 flex flex-col gap-2">
-          <input
-            ref={mappingInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void handleImportMapping(file);
-              e.target.value = "";
-            }}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => mappingInputRef.current?.click()}
-          >
-            {t("importMapping")}
-          </Button>
-          {mappingError ? (
-            <p className="text-xs text-destructive">{mappingError}</p>
-          ) : null}
-        </div>
-
-        <div className="my-3 rounded-lg border bg-muted/20 p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
-            <Sparkles className="size-3.5 text-primary" /> AI Map
-            {aiProvider ? (
-              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{aiProvider}</span>
-            ) : null}
-          </div>
-          <p className="mb-2 text-[11px] text-muted-foreground">Đoán schema tự động từ headers + 3 dòng đầu. Thử Gemini → Groq fallback.</p>
-          <SparkHoverButton
-            size="sm"
-            className="w-full"
-            disabled={aiLoading || !sheetsHeaders.length}
-            onClick={() => void handleAiMap()}
-          >
-            {aiLoading ? "AI đang đoán…" : "AI Map — Gợi ý mapping"}
-          </SparkHoverButton>
-          {aiError ? <p className="mt-2 text-xs text-destructive">{aiError}</p> : null}
-          {aiSuggestions ? (
-            <div className="mt-3 space-y-2">
-              <p className="text-xs font-medium">Preview gợi ý ({aiSuggestions.length}):</p>
-              <div className="max-h-40 space-y-1 overflow-auto rounded border bg-background p-2">
-                {aiSuggestions.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
-                    <span className="truncate font-mono">{s.source} → {s.target}</span>
-                    <span className="shrink-0 rounded bg-muted px-1 py-0.5">{s.transform}</span>
-                    {s.confidence != null ? <span className="text-muted-foreground">{Math.round(s.confidence * 100)}%</span> : null}
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" className="flex-1" onClick={applyAiSuggestions}>
-                  Áp dụng
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setAiSuggestions(null)}>
-                  Bỏ qua
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-        <div className="space-y-3">
-          {sheetsMappings.map((m, i) => (
-            <div key={i} className="space-y-1">
-              <Input value={m.source} readOnly className="text-xs" />
-              <Input
-                value={m.target}
-                onChange={(e) => {
-                  const next = [...sheetsMappings];
-                  next[i] = { ...next[i], target: e.target.value };
-                  setSheetsMappings(next);
-                }}
-                className="text-xs"
-                placeholder={t("targetField")}
-              />
-              <Select
-                value={m.transform}
-                onValueChange={(v) => {
-                  const next = [...sheetsMappings];
-                  next[i] = {
-                    ...next[i],
-                    transform: v as typeof m.transform,
-                  };
-                  setSheetsMappings(next);
-                }}
-              >
-                <SelectTrigger className="text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t("none")}</SelectItem>
-                  <SelectItem value="trim">{t("trim")}</SelectItem>
-                  <SelectItem value="email">{t("email")}</SelectItem>
-                  <SelectItem value="phone">{t("phone")}</SelectItem>
-                  <SelectItem value="date">{t("date")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ))}
-        </div>
-      </>
-    ) : activeTool === "filter" ? (
+    activeTool === "filter" ? (
       <>
         <ToolPanelHeader
           title={t("filter.title")}
           onClose={() => setActiveTool(null)}
         />
         <p className="mb-3 text-xs text-muted-foreground">{t("filter.howTo")}</p>
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <span className="text-xs font-medium">{t("filterColumn")}</span>
-            <Select value={filterColumn} onValueChange={setFilterColumn}>
-              <SelectTrigger className="text-xs">
-                <SelectValue placeholder="" />
-              </SelectTrigger>
-              <SelectContent>
-                {filterColumns.map((col) => (
-                  <SelectItem key={col} value={col}>
-                    {col}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <span className="text-xs font-medium">{t("filterCondition")}</span>
-            <Select
-              value={filterOp}
-              onValueChange={(v) => setFilterOp(v as FilterOp)}
-            >
-              <SelectTrigger className="text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="contains">{t("filterContains")}</SelectItem>
-                <SelectItem value="equals">{t("filterEquals")}</SelectItem>
-                <SelectItem value="notEmpty">{t("filterNotEmpty")}</SelectItem>
-                <SelectItem value="isEmpty">{t("filterIsEmpty")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {filterOp === "contains" || filterOp === "equals" ? (
-            <div className="space-y-2">
-              <span className="text-xs font-medium">{t("filterValue")}</span>
-              <Input
-                value={filterValue}
-                onChange={(e) => setFilterValue(e.target.value)}
-                className="text-xs"
-              />
-            </div>
-          ) : null}
-          <SparkHoverButton size="sm" onClick={applyFilter}>
-            {t("applyFilter")}
-          </SparkHoverButton>
-          {filterActive ? (
-            <>
-              <p className="text-xs text-primary">{t("filterActive")}</p>
-              <Button size="sm" variant="outline" onClick={clearFilter}>
-                {t("clearFilter")}
+        {filterActive ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium">
+                {activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"} · AND
+              </span>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={clearAllFilters}>
+                {t("clearFilter")} all
               </Button>
-            </>
-          ) : null}
-        </div>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(columnFilters).map(([col, f]) => (
+                <div key={col} className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2 py-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium">{col}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {f.selectedValues ? `${f.selectedValues.length} selected` : f.op === "notEmpty" ? t("filterNotEmpty") : f.op === "isEmpty" ? t("filterIsEmpty") : `${f.op === "contains" ? t("filterContains") : t("filterEquals")} "${f.value}"`}
+                    </p>
+                  </div>
+                  <Button size="icon" variant="ghost" className="size-6 shrink-0" onClick={() => clearFilterForColumn(col)}>
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">Matches all filters (AND). Use column header funnel to add more.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">No active filters. Click the funnel icon in any column header to filter.</p>
+          </div>
+        )}
       </>
     ) : activeTool === "clean" ? (
       <>
@@ -804,11 +633,11 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
           {visibleReviewIssues.length > 0 ? (
             (() => {
               const TYPE_LABEL: Record<string, string> = {
-                empty: "Missing",
-                email: "Email",
-                phone: "Phone",
-                date: "Date",
-                duplicate: "Duplicate",
+                empty: t("reviewTypeMissing"),
+                email: t("reviewTypeEmail"),
+                phone: t("reviewTypePhone"),
+                date: t("reviewTypeDate"),
+                duplicate: t("reviewTypeDuplicate"),
               };
               const typeGroups = (() => {
                 const byType = new Map<string, { type: string; total: number; byRule: Map<string, { rule: ReviewRule; issues: ReviewIssue[] }> }>();
@@ -1053,21 +882,6 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
           >
             {t("exportXlsx")}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              downloadSeanOfficeBlob(
-                exportMappingJson(sheetsMappings),
-                "excel",
-                fileName,
-                "json",
-                "mapping"
-              )
-            }
-          >
-            {t("exportMapping")}
-          </Button>
         </div>
       </>
     ) : null;
@@ -1122,6 +936,36 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
               onReset={resetZoom}
             />
           </div>
+          {filterActive && (
+            <div className="sticky top-[48px] z-10 mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border bg-card/90 px-2 py-1.5 text-xs backdrop-blur">
+              <span className="font-medium">Filters:</span>
+              {Object.entries(columnFilters).map(([col, f]) => (
+                <span key={col} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5">
+                  <span className="max-w-[120px] truncate font-medium">{col}:</span>
+                  <span className="max-w-[140px] truncate text-muted-foreground">
+                    {f.selectedValues
+                      ? `${f.selectedValues.length} selected`
+                      : f.op === "notEmpty"
+                        ? t("filterNotEmpty")
+                        : f.op === "isEmpty"
+                          ? t("filterIsEmpty")
+                          : `${f.op === "contains" ? t("filterContains") : t("filterEquals")} "${f.value}"`}
+                  </span>
+                  <button
+                    onClick={() => clearFilterForColumn(col)}
+                    className="ml-1 rounded-full p-0.5 hover:bg-primary/20"
+                    aria-label={`Clear ${col} filter`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+              <Button size="sm" variant="ghost" className="ml-1 h-6 text-xs" onClick={clearAllFilters}>
+                Clear all
+              </Button>
+              <span className="ml-auto shrink-0 text-muted-foreground">AND · {rowCount} of {totalRows}</span>
+            </div>
+          )}
           <div
             className="origin-top overflow-x-auto rounded-lg border bg-background"
             style={{
@@ -1134,11 +978,113 @@ export function SheetsWorkspace({ fileName, onNewFile }: SheetsWorkspaceProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="sticky left-0 w-12 bg-background text-xs">#</TableHead>
-                  {displayHeaders.map((h) => (
-                    <TableHead key={h} className="text-xs">
-                      {h}
-                    </TableHead>
-                  ))}
+                  {displayHeaders.map((h) => {
+                    const isActive = !!columnFilters[h];
+                    const isOpen = openFilterColumn === h;
+                    const uniqueVals = uniqueColumnValues(baseData, h, 100);
+                    const filteredVals = filterSearch
+                      ? uniqueVals.filter((v) => v.toLowerCase().includes(filterSearch.toLowerCase()))
+                      : uniqueVals;
+                    const allSelected =
+                      filteredVals.length > 0 && filteredVals.every((v) => selectedValuesTemp.includes(v));
+                    return (
+                      <TableHead key={h} className="whitespace-nowrap text-xs group">
+                        <Popover open={isOpen} onOpenChange={(open) => setOpenFilterColumn(open ? h : null)}>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="truncate" title={h}>
+                              {h}
+                            </span>
+                            <PopoverTrigger asChild>
+                              <button
+                                onClick={() => {
+                                  if (!isOpen) openFilterForColumn(h);
+                                }}
+                                className={`flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted ${isActive ? "bg-primary/10 text-primary opacity-100" : "opacity-0 group-hover:opacity-60"} ${isOpen ? "!opacity-100 bg-muted" : ""}`}
+                                aria-label={`Filter ${h}`}
+                              >
+                                <Filter className="size-3" />
+                              </button>
+                            </PopoverTrigger>
+                          </div>
+                          <PopoverContent align="start" side="bottom" sideOffset={4} collisionPadding={8} className="w-64 p-2">
+                            <div className="space-y-2">
+                              <Input
+                                placeholder="Search values"
+                                value={filterSearch}
+                                onChange={(e) => setFilterSearch(e.target.value)}
+                                className="h-7 text-xs"
+                              />
+                              <label className="flex items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
+                                <Checkbox
+                                  checked={allSelected}
+                                  onCheckedChange={(v) => {
+                                    if (v) setSelectedValuesTemp([...filteredVals]);
+                                    else setSelectedValuesTemp([]);
+                                  }}
+                                />
+                                <span className="font-medium">Select All</span>
+                                <span className="ml-auto text-[11px] text-muted-foreground">{filteredVals.length}</span>
+                              </label>
+                              <div className="max-h-36 space-y-0.5 overflow-auto rounded border bg-background p-1">
+                                {filteredVals.length ? (
+                                  filteredVals.map((val) => (
+                                    <label key={val} className="flex items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
+                                      <Checkbox
+                                        checked={selectedValuesTemp.includes(val)}
+                                        onCheckedChange={(v) => {
+                                          setSelectedValuesTemp((prev) =>
+                                            v ? [...prev, val] : prev.filter((x) => x !== val)
+                                          );
+                                        }}
+                                      />
+                                      <span className="truncate" title={val}>
+                                        {val || "(empty)"}
+                                      </span>
+                                    </label>
+                                  ))
+                                ) : (
+                                  <p className="px-1 py-2 text-center text-xs text-muted-foreground">No values</p>
+                                )}
+                              </div>
+                              <div className="border-t pt-2">
+                                <p className="mb-1 text-[11px] font-medium text-muted-foreground">Filter by condition</p>
+                                <div className="flex gap-1">
+                                  <Select value={filterOpTemp} onValueChange={(v) => setFilterOpTemp(v as FilterOp)}>
+                                    <SelectTrigger className="h-7 flex-1 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="contains">{t("filterContains")}</SelectItem>
+                                      <SelectItem value="equals">{t("filterEquals")}</SelectItem>
+                                      <SelectItem value="notEmpty">{t("filterNotEmpty")}</SelectItem>
+                                      <SelectItem value="isEmpty">{t("filterIsEmpty")}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                {(filterOpTemp === "contains" || filterOpTemp === "equals") && (
+                                  <Input
+                                    placeholder={t("filterValue")}
+                                    value={filterValueTemp}
+                                    onChange={(e) => setFilterValueTemp(e.target.value)}
+                                    className="mt-1 h-7 text-xs"
+                                  />
+                                )}
+                              </div>
+                              <div className="flex gap-1 pt-1">
+                                <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => clearFilterForColumn(h)}>
+                                  Clear
+                                </Button>
+                                <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => applyFilterForColumn(h)}>
+                                  Apply
+                                </Button>
+                              </div>
+                              <p className="text-center text-[10px] text-muted-foreground">OR within column · AND across columns</p>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </TableHead>
+                    );
+                  })}
                 </TableRow>
               </TableHeader>
               <TableBody>
