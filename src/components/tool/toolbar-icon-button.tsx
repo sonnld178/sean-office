@@ -3,6 +3,7 @@
 import { useState, type MouseEvent, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type ToolbarIconButtonProps = {
   icon: ReactNode;
@@ -59,7 +60,7 @@ export function ToolbarIconButton({
       whileTap={reduceMotion || disabled ? undefined : { scale: 0.94 }}
       transition={{ type: "spring", stiffness: 520, damping: 28 }}
       className={cn(
-        "relative inline-flex h-8 shrink-0 items-center overflow-hidden rounded-md border text-sm font-medium outline-none transition-colors",
+        "relative inline-flex h-8 shrink-0 cursor-pointer items-center overflow-hidden rounded-md border text-sm font-medium outline-none transition-colors",
         "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",
         variant === "outline" &&
@@ -112,14 +113,11 @@ export function ToolbarIconButton({
   if (!tip) return button;
 
   return (
-    <span className="group relative inline-flex">
-      {button}
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 w-max max-w-44 -translate-x-1/2 rounded-md bg-zinc-900 px-2 py-1 text-center text-xs font-normal leading-snug text-zinc-50 opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 line-clamp-2"
-      >
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={6} className="max-w-44 text-center">
         {tip}
-      </span>
-    </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }

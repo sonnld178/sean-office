@@ -85,7 +85,7 @@
     "aiFixAiWorking": "AI đang sửa…",
     "aiFixAiPending": "Đã có sửa nhanh — AI đang xử lý phần còn lại…",
     "aiFixLocal": "nhanh",
-    "aiFixTimeout": "Gửi vào hàng chờ quá lâu (>10s). Kiểm tra mạng rồi thử lại.",
+    "aiFixTimeout": "Gửi vào hàng chờ quá lâu (>20s). Kiểm tra mạng rồi thử lại.",
     "aiFixError": "AI Fix thất bại",
     "aiFixPreview": "Xem trước ({n} chỗ sửa)",
     "aiFixApply": "Áp dụng",

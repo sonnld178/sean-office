@@ -14,8 +14,9 @@ export async function callGroq(
 
   const useGateway = !!env.gatewayKey;
   const url = useGateway ? GATEWAY_URL : GROQ_URL;
-  // Groq compound-mini is free No-limit; id is groq/compound-mini on both direct + gateway.
-  const model = "groq/compound-mini";
+  // Bulk ≥10 uses openai/gpt-oss-120b (65K output, 131K context, 250K TPM free) for long JSON; single uses groq/compound-mini (8K output)
+  const bulk = (req as unknown as { bulk?: boolean })?.bulk;
+  const model = bulk ? "openai/gpt-oss-120b" : "groq/compound-mini";
 
   const messages: Array<{ role: string; content: string | unknown[] }> = [
     { role: "system", content: req.system },
