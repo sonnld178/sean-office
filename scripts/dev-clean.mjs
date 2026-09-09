@@ -25,7 +25,7 @@ run("npx", ["--yes", "kill-port", "3000", "3001"]);
 // Give Windows time to release file handles on .next
 Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
 
-for (const dir of [".next", join(".next", "cache")]) {
+for (const dir of [".next-dev", join(".next-dev", "cache")]) {
   const path = join(root, dir);
   if (existsSync(path)) {
     console.log(`[dev:clean] Removing ${dir}…`);

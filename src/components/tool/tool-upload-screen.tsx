@@ -18,6 +18,8 @@ export type SampleFile = {
   label: string;
   /** if true, hide Load in app button (download only) */
   downloadOnly?: boolean;
+  /** if true, hide download button (try sample only) */
+  tryOnly?: boolean;
 };
 
 interface ToolUploadScreenProps {
@@ -71,12 +73,14 @@ export function ToolUploadScreen({
             <span className="text-xs text-muted-foreground">{tSample("noFile")}</span>
             {samples.map((s) => (
               <div key={s.href} className="flex items-center gap-1.5">
+                {!s.tryOnly && (
                 <Button asChild variant="outline" size="sm" className="h-7 gap-1.5">
                   <a href={s.href} download>
                     <Download className="size-3.5" />
                     {s.label}
                   </a>
                 </Button>
+                )}
                 {onLoadSample && !s.downloadOnly && (
                   <Button
                     variant="secondary"
@@ -167,12 +171,14 @@ export function ToolUploadScreen({
             <div className="flex flex-wrap items-center gap-2">
               {samples.map((s) => (
                 <div key={s.href} className="flex items-center gap-1.5">
+                  {!s.tryOnly && (
                   <Button asChild variant="outline" size="sm" className="h-8 gap-1.5">
                     <a href={s.href} download>
                       <Download className="size-3.5" />
                       {s.label}
                     </a>
                   </Button>
+                  )}
                   {onLoadSample && !s.downloadOnly && (
                     <Button
                       variant="secondary"
