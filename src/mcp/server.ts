@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * SeanOffice MCP server — wraps public API for Claude/Cursor.
- * Tools: sheets_map, pdf_sign, ai_translate_image
+ * Tools: sheets_map, pdf_sign
  * Run: npx tsx src/mcp/server.ts  or  npm run mcp:dev
  */
 
@@ -49,26 +49,6 @@ const tools: Tool[] = [
     handler: async (args) => {
       // For MCP demo: just echo; real impl would upload file
       return { hint: "Use /api/v1/pdf/watermark with multipart file", args, base: BASE };
-    },
-  },
-  {
-    name: "ai_translate_image",
-    description: "Translate text in image to target language (Gemini Vision -> Groq fallback)",
-    inputSchema: {
-      type: "object",
-      properties: {
-        imageBase64: { type: "string", description: "base64 image" },
-        targetLang: { type: "string", enum: ["vi", "en", "ja", "ko"] },
-      },
-      required: ["imageBase64"],
-    },
-    handler: async (args) => {
-      const res = await fetch(`${BASE}/api/ai/image/translate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(args),
-      });
-      return res.json();
     },
   },
 ];

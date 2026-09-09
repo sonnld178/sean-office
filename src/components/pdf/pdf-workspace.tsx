@@ -40,14 +40,12 @@ import {
   insertPdfAt,
   rotatePdfPages,
 } from "@/lib/pdf-tools";
-import { AiImageTranslatePanel } from "@/components/ai/ai-image-translate-panel";
 import { downloadSeanOfficeBlob } from "@/lib/download-names";
 import {
   Check,
   Copy,
   Download,
   Droplets,
-  Languages,
   FileSpreadsheet,
   FileText,
   GitMerge,
@@ -56,14 +54,13 @@ import {
   Minimize2,
   PenLine,
   RotateCcw,
-  Save,
   Scissors,
   Type,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 
-type ToolPanel = PdfSidebarTool | "aiTranslate" | null;
+type ToolPanel = PdfSidebarTool | null;
 type WatermarkMode = "text" | "image";
 
 const DEFAULT_SIG = { width: 140, height: 48 };
@@ -322,7 +319,6 @@ export function PdfWorkspace({
   const [watermarkRotation, setWatermarkRotation] = useState(-30);
   const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
   const [multiSelect, setMultiSelect] = useState(false);
@@ -336,6 +332,12 @@ export function PdfWorkspace({
   const pendingScrollRef = useRef<number | null>(null);
   const sigCanvasRef = useRef<HTMLCanvasElement>(null);
   const padRef = useRef<SignaturePad | null>(null);
+  // Tự save tạm im lặng: ref giữ giá trị mới nhất cho debounce commit
+  const overlaysRef = useRef(overlays);
+  overlaysRef.current = overlays;
+  const pdfBufRef = useRef(pdfBuf);
+  pdfBufRef.current = pdfBuf;
+  const autoSavingRef = useRef(false);
 
   const activeMetrics = pages.find((p) => p.pageIndex === activePage)?.metrics;
 
@@ -772,19 +774,47 @@ export function PdfWorkspace({
     return exportPdfWithBakedOverlays(pdfBuf, baked, metricsByPage());
   }, [buildBakedPlacements, pdfBuf, metricsByPage]);
 
-  const handleSave = async () => {
-    if (!overlays.length) return;
-    setSaving(true);
+  // Tự commit overlays vào pdfBuf sau mỗi chỉnh sửa (im lặng, không nút Save).
+  // Chỉ xóa overlays nếu snapshot lúc bake vẫn khớp — user chỉnh tiếp trong
+  // lúc bake thì giữ lại để hẹn vòng sau, không mất nét vẽ.
+  const autoCommit = useCallback(async () => {
+    const snapshot = overlaysRef.current;
+    if (!snapshot.length || autoSavingRef.current) return;
+    autoSavingRef.current = true;
     try {
-      const out = await exportBakedPdf();
+      const baked: BakedPlacement[] = [];
+      for (const o of snapshot) {
+        baked.push(await bakeOverlayPlacement(o));
+      }
+      const out = await exportPdfWithBakedOverlays(
+        pdfBufRef.current,
+        baked,
+        metricsByPage()
+      );
       const ab = await out.arrayBuffer();
       onPdfUpdate(ab.slice(0));
-      setOverlays([]);
-      setSelectedOverlayId(null);
+      const ids = new Set(snapshot.map((o) => o.id));
+      setOverlays((prev) =>
+        prev.length === snapshot.length && prev.every((o) => ids.has(o.id))
+          ? []
+          : prev
+      );
+      setSelectedOverlayId((prev) =>
+        prev && ids.has(prev) ? null : prev
+      );
     } finally {
-      setSaving(false);
+      autoSavingRef.current = false;
     }
-  };
+  }, [metricsByPage, onPdfUpdate]);
+
+  // Debounce 1.5s sau lần chỉnh cuối mới commit (kéo-thả sinh change liên tục)
+  useEffect(() => {
+    if (!overlays.length || exporting) return;
+    const timer = setTimeout(() => {
+      void autoCommit();
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [overlays, pdfBuf, exporting, autoCommit]);
 
   const handleDownload = async () => {
     setExporting(true);
@@ -805,7 +835,6 @@ export function PdfWorkspace({
   const showSidebar =
     panel || (selectedOverlay && supportsOpacity(selectedOverlay));
   const isEditPanel = panel === "watermark" || panel === "signature";
-  const isAiTranslatePanel = panel === "aiTranslate";
   const isUtilityPanel =
     panel === "merge" ||
     panel === "split" ||
@@ -902,21 +931,6 @@ export function PdfWorkspace({
             onClick={() => togglePanel("extract")}
           />
           <ToolbarIconButton
-            icon={<Languages />}
-            label="AI Translate"
-            tip={t("tipTranslate")}
-            active={panel === "aiTranslate"}
-            onClick={() => togglePanel("aiTranslate")}
-          />
-          <ToolbarIconButton
-            icon={<Save />}
-            label={saving ? t("saving") : t("savePdf")}
-            tip={t("tipSave")}
-            onClick={() => void handleSave()}
-            disabled={saving || !overlays.length}
-            variant="secondary"
-          />
-          <ToolbarIconButton
             icon={<Download />}
             label={t("downloadPdf")}
             tip={t("tipDownload")}
@@ -998,12 +1012,6 @@ export function PdfWorkspace({
 
         {showSidebar && (
           <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-card p-4 sm:w-56 sm:border-l sm:border-t-0 md:w-72">
-            {isAiTranslatePanel && (
-              <>
-                <ToolPanelHeader title="AI Translate Image" onClose={() => setPanel(null)} />
-                <AiImageTranslatePanel />
-              </>
-            )}
             {isUtilityPanel && panel && (
               <>
                 <ToolPanelHeader
