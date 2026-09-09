@@ -49,7 +49,7 @@ Shared: `tool-upload-screen.tsx`, `tool-workspace-shell.tsx`, `ClickSpark.tsx`, 
 |-------|-------------------------|---------|
 | `/sheets` | Filter · Clean · Review (AI Fix) · Export | Review v2 header-first, 500 dòng limit |
 | `/word` | Fill (Quick Fill + sample/AI) · Clean · Extract · Template | Redirect `/docs` → `/word` · đã gỡ AI Translate khỏi Word (giữ ở PDF) |
-| `/pdf` | Edit (Watermark/Sign) · Merge · Split · Pages · Compress · Extract · AI Translate Image | Sidebar SmallPDF-style + overlays |
+| `/pdf` | Edit (Watermark/Sign, tự save 1.5s) · Merge · Split · Pages · Compress · Extract | Sidebar SmallPDF-style + overlays · đã xóa AI Translate + nút Save |
 | `/workflows/hr-cv` | 5-step board (in development) | `hr-processor.ts` |
 
 Redirect legacy: `/sheets/[step]` → `/sheets`, `/pdf/[mode]` → `/pdf`.
@@ -160,6 +160,8 @@ Chỉ khi “chưa có” mới đề xuất cách làm tốt nhất từ first 
 - **2026-09-09:** Word Fill nhanh (feat/word-update-polish, chưa commit) — Quick Fill nhập tay + preview + thêm vào batch, sample Try-sample tự nạp (preview dòng 1, tải ZIP đủ 3 dòng), API `POST /api/ai/word/suggest` gợi ý 3 dòng theo locale, tải xuống luôn gom 1 ZIP; gỡ AI Translate khỏi Word (giữ PDF + API image/translate) — `docs-workspace.tsx, word/page.tsx, api/ai/word/suggest/route.ts, messages/*`
 - **2026-09-09:** Word Fill redesign (chưa commit) — copy ngắn, Quick Fill label-trên-input + nút full-width (fix cắt UI panel 256px), segmented Nhập tay/Sample/Upload + bảng data (click dòng → nạp form + preview ngay, hiện 10 + note), dropdown preview full 10 dòng có tên, tải ZIP cap 100, AI mọi nguồn; sample bar Word gọn 2 nút (`tryOnly`) — `docs-workspace.tsx, tool-upload-screen.tsx, messages/*`
 - **2026-09-09:** Word Extract sample (chưa commit) — khi không có bảng hiện nút `Thử sample có bảng`, nạp `word-tables.docx` (2 bảng) qua prop `onLoadSampleFile` mới — `docs-workspace.tsx, word/page.tsx, messages/*`
+- **2026-09-09:** Merge Word `9f39e1f` (#3 squash, đã xóa branch) — Quick Fill redesign + word/suggest + tryOnly + table sample + tách `.next-dev`; chẩn đoán AI prod: keys/Supabase đủ, prod cũ thiếu route + retry → chờ Vercel deploy `9f39e1f`
+- **2026-09-09:** PDF trim (feat/pdf-trim-autosave, chưa commit) — xóa triệt để AI Translate (panel + route + MCP tool + openapi entry), bỏ nút Save → tự commit debounce 1.5s im lặng (snapshot-guard), giữ Overlay opacity/rotation/apply-all — `pdf-workspace.tsx, mcp/server.ts, openapi.json, messages/*`
 - _(Thêm dòng mới sau mỗi commit — `YYYY-MM-DD: tóm tắt - file - commit`)_
 
 ## 16) Hướng dẫn cho AI khi mở chat mới

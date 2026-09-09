@@ -67,8 +67,8 @@
     "/api/ai/sheets/map": {
       "post": { "summary": "Internal AI sheets map (gateway with fallback)", "responses": { "200": { "description": "Mappings + provider_chain" } } }
     },
-    "/api/ai/image/translate": {
-      "post": { "summary": "AI translate image (Gemini Vision -> Groq fallback)", "responses": { "200": { "description": "detected_text + translated_text" } } }
+    "/api/ai/word/suggest": {
+      "post": { "summary": "AI suggest Word fill rows (3 rows, locale-aware)", "responses": { "200": { "description": "rows + provider_chain" } } }
     }
   }
 }
