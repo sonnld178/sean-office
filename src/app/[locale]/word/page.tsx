@@ -11,10 +11,17 @@ export default function WordPage() {
   const t = useTranslations("docs");
   const [docBuf, setDocBuf] = useState<ArrayBuffer | null>(null);
   const [fileName, setFileName] = useState("document.docx");
+  const [templateSource, setTemplateSource] = useState<"sample" | "upload">("upload");
 
   const handleNewFile = useCallback(() => {
     setDocBuf(null);
     setFileName("document.docx");
+    setTemplateSource("upload");
+  }, []);
+
+  const handleLoadSampleFile = useCallback((buf: ArrayBuffer, name: string) => {
+    setDocBuf(buf.slice(0));
+    setFileName(name);
   }, []);
 
   return (
@@ -22,7 +29,7 @@ export default function WordPage() {
       {!docBuf ? (
         <ToolUploadScreen
           title={t("title")}
-          subtitle={t.raw("fill.howTo")}
+          subtitle={t("subtitle")}
           label={t("dropDocx")}
           secondaryLabel={t("uploadDragHint")}
           icon={<FileText className="size-6" />}
@@ -31,7 +38,7 @@ export default function WordPage() {
               [".docx"],
           }}
           samples={[
-            { href: "/samples/word-template.docx", label: "Template .docx" },
+            { href: "/samples/word-template.docx", label: "Template .docx", tryOnly: true },
             { href: "/samples/word-data.xlsx", label: "Data .xlsx", downloadOnly: true },
           ]}
           onLoadSample={async (href) => {
@@ -40,10 +47,12 @@ export default function WordPage() {
             const buffer = await res.arrayBuffer();
             setDocBuf(buffer);
             setFileName(href.split("/").pop() || "word-template.docx");
+            setTemplateSource("sample");
           }}
           onFiles={async (items, { setProgress }) => {
             setDocBuf(items[0].buffer);
             setFileName(items[0].file.name || "document.docx");
+            setTemplateSource("upload");
             setProgress(100);
           }}
         />
@@ -53,6 +62,8 @@ export default function WordPage() {
           fileName={fileName}
           onNewFile={handleNewFile}
           onDocUpdate={setDocBuf}
+          templateSource={templateSource}
+          onLoadSampleFile={handleLoadSampleFile}
         />
       )}
     </AppShell>

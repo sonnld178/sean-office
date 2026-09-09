@@ -831,6 +831,7 @@ export function PdfWorkspace({
             <ToolbarIconButton
               icon={<ZoomOut className="size-3.5" />}
               label={t("zoomOut")}
+              tip={t("tipZoomOut")}
               onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
               variant="ghost"
             />
@@ -845,6 +846,7 @@ export function PdfWorkspace({
             <ToolbarIconButton
               icon={<ZoomIn className="size-3.5" />}
               label={t("zoomIn")}
+              tip={t("tipZoomIn")}
               onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
               variant="ghost"
             />
@@ -853,54 +855,63 @@ export function PdfWorkspace({
           <ToolbarIconButton
             icon={<Droplets />}
             label={t("addWatermark")}
+            tip={t("tipWatermark")}
             active={panel === "watermark"}
             onClick={() => togglePanel("watermark")}
           />
           <ToolbarIconButton
             icon={<PenLine />}
             label={t("addSignature")}
+            tip={t("tipSignature")}
             active={panel === "signature"}
             onClick={() => togglePanel("signature")}
           />
           <ToolbarIconButton
             icon={<GitMerge />}
             label={t("toolMerge")}
+            tip={t("tipMerge")}
             active={panel === "merge"}
             onClick={() => togglePanel("merge")}
           />
           <ToolbarIconButton
             icon={<Scissors />}
             label={t("toolSplit")}
+            tip={t("tipSplit")}
             active={panel === "split"}
             onClick={() => togglePanel("split")}
           />
           <ToolbarIconButton
             icon={<Layers />}
             label={t("toolPages")}
+            tip={t("tipPages")}
             active={panel === "pages"}
             onClick={() => togglePanel("pages")}
           />
           <ToolbarIconButton
             icon={<Minimize2 />}
             label={t("toolCompress")}
+            tip={t("tipCompress")}
             active={panel === "compress"}
             onClick={() => togglePanel("compress")}
           />
           <ToolbarIconButton
             icon={<FileSpreadsheet />}
             label={t("toolExtract")}
+            tip={t("tipExtract")}
             active={panel === "extract"}
             onClick={() => togglePanel("extract")}
           />
           <ToolbarIconButton
             icon={<Languages />}
             label="AI Translate"
+            tip={t("tipTranslate")}
             active={panel === "aiTranslate"}
             onClick={() => togglePanel("aiTranslate")}
           />
           <ToolbarIconButton
             icon={<Save />}
             label={saving ? t("saving") : t("savePdf")}
+            tip={t("tipSave")}
             onClick={() => void handleSave()}
             disabled={saving || !overlays.length}
             variant="secondary"
@@ -908,6 +919,7 @@ export function PdfWorkspace({
           <ToolbarIconButton
             icon={<Download />}
             label={t("downloadPdf")}
+            tip={t("tipDownload")}
             onClick={() => void handleDownload()}
             disabled={exporting}
             variant="default"
@@ -915,6 +927,7 @@ export function PdfWorkspace({
           <ToolbarIconButton
             icon={<RotateCcw />}
             label={t("newFile")}
+            tip={t("tipNewFile")}
             onClick={onClose}
             variant="ghost"
           />

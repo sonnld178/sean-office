@@ -48,7 +48,7 @@ Shared: `tool-upload-screen.tsx`, `tool-workspace-shell.tsx`, `ClickSpark.tsx`, 
 | Route | Tools (toolbar → panel) | Ghi chú |
 |-------|-------------------------|---------|
 | `/sheets` | Filter · Clean · Review (AI Fix) · Export | Review v2 header-first, 500 dòng limit |
-| `/word` | Fill · Clean · Extract · AI Translate Image | Redirect `/docs` → `/word` |
+| `/word` | Fill (Quick Fill + sample/AI) · Clean · Extract · Template | Redirect `/docs` → `/word` · đã gỡ AI Translate khỏi Word (giữ ở PDF) |
 | `/pdf` | Edit (Watermark/Sign) · Merge · Split · Pages · Compress · Extract · AI Translate Image | Sidebar SmallPDF-style + overlays |
 | `/workflows/hr-cv` | 5-step board (in development) | `hr-processor.ts` |
 
@@ -157,6 +157,9 @@ Chỉ khi “chưa có” mới đề xuất cách làm tốt nhất từ first 
 - **2026-09-08:** Tạo `AGENTS.md` — tổng hợp `CONTEXT.md`+`SEAN_OFFICE_PORT_PLAN.md`+`README.md`; cấu hình `xhigh`/`high` + `instructions: ["AGENTS.md"]`.
 - **2026-09-08 (tinh gọn):** Tinh gọn `AGENTS.md` 213→~230 dòng — thêm Commands/Boundaries/Parallel Build/Plan Research Protocol; xóa `agent.md` thừa; tối ưu cho `oh-my-opencode` Task song song.
 - **2026-09-09:** Sheets finalize + UI polish — AI queue 20s/bulk/retry/pumpQueue, cursor-pointer toàn app (button.tsx), Radix TooltipProvider 150ms (toolbar-icon-button.tsx, app-shell.tsx) — `button.tsx, toolbar-icon-button.tsx, app-shell.tsx, jobs.ts, providers/*`
+- **2026-09-09:** Word Fill nhanh (feat/word-update-polish, chưa commit) — Quick Fill nhập tay + preview + thêm vào batch, sample Try-sample tự nạp (preview dòng 1, tải ZIP đủ 3 dòng), API `POST /api/ai/word/suggest` gợi ý 3 dòng theo locale, tải xuống luôn gom 1 ZIP; gỡ AI Translate khỏi Word (giữ PDF + API image/translate) — `docs-workspace.tsx, word/page.tsx, api/ai/word/suggest/route.ts, messages/*`
+- **2026-09-09:** Word Fill redesign (chưa commit) — copy ngắn, Quick Fill label-trên-input + nút full-width (fix cắt UI panel 256px), segmented Nhập tay/Sample/Upload + bảng data (click dòng → nạp form + preview ngay, hiện 10 + note), dropdown preview full 10 dòng có tên, tải ZIP cap 100, AI mọi nguồn; sample bar Word gọn 2 nút (`tryOnly`) — `docs-workspace.tsx, tool-upload-screen.tsx, messages/*`
+- **2026-09-09:** Word Extract sample (chưa commit) — khi không có bảng hiện nút `Thử sample có bảng`, nạp `word-tables.docx` (2 bảng) qua prop `onLoadSampleFile` mới — `docs-workspace.tsx, word/page.tsx, messages/*`
 - _(Thêm dòng mới sau mỗi commit — `YYYY-MM-DD: tóm tắt - file - commit`)_
 
 ## 16) Hướng dẫn cho AI khi mở chat mới
